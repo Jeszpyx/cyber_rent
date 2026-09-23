@@ -1,6 +1,6 @@
 import { useEffect, useReducer } from 'react';
 import { decideBotAction } from '../../shared/game/bot';
-import { applyAction, createGame, currentPlayer, type NewGameOptions } from '../../shared/game/engine';
+import { actingPlayer, applyAction, createGame, type NewGameOptions } from '../../shared/game/engine';
 
 const BOT_DELAY_MS = 650;
 /** Карточку бота держим дольше, чтобы человек успел прочитать. */
@@ -10,7 +10,8 @@ export function useGame(options: NewGameOptions) {
   const [state, dispatch] = useReducer(applyAction, options, createGame);
 
   useEffect(() => {
-    if (!currentPlayer(state).isBot) return;
+    // В фазе долга решает должник, а не обязательно тот, чей ход.
+    if (!actingPlayer(state).isBot) return;
     const action = decideBotAction(state);
     if (!action) return;
     const delay = state.phase === 'card' ? BOT_CARD_DELAY_MS : BOT_DELAY_MS;

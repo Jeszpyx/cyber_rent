@@ -32,6 +32,8 @@ export function Board({ state, onCellClick, children }: Props) {
               row={row}
               col={col}
               ownerColor={owner?.color}
+              level={state.buildings[cell.index] ?? 0}
+              mortgaged={Boolean(state.mortgaged[cell.index])}
               tokens={tokens}
               onClick={() => onCellClick(cell.index)}
             />

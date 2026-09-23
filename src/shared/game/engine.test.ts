@@ -45,10 +45,13 @@ describe('engine', () => {
     const state = newGame();
     state.owners[3] = 'p1';
     state.owners[39] = 'p0';
+    state.mortgaged[39] = true; // заложено — денег взять неоткуда
     state.players[0].money = 2;
     resolveRoll(state, [1, 2]);
     expect(state.players[0].bankrupt).toBe(true);
-    expect(state.owners[39]).toBeUndefined();
+    expect(state.owners[39]).toBe('p1');
+    expect(state.mortgaged[39]).toBe(true);
+    expect(state.players[1].money).toBe(START_MONEY + 2);
     expect(state.phase).toBe('gameOver');
     expect(state.winnerId).toBe('p1');
   });

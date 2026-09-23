@@ -170,7 +170,7 @@ describe('card effects', () => {
     expect(after.winnerId).toBe('p0');
   });
 
-  it('getOutOfIsolation stays with the player until bankruptcy', () => {
+  it('getOutOfIsolation stays with the player until bankruptcy and goes to the creditor', () => {
     const state = newGame();
     putOnTop(state, 'hack-10');
     state.players[0].position = 4;
@@ -187,7 +187,8 @@ describe('card effects', () => {
     const final = applyAction(bankrupting, { type: 'APPLY_CARD' });
     expect(final.players[0].bankrupt).toBe(true);
     expect(final.players[0].releaseCards).toEqual([]);
-    expect(final.decks.hack.at(-1)).toBe('hack-10');
+    expect(final.players[1].releaseCards).toEqual(['hack-10']);
+    expect(final.decks.hack).not.toContain('hack-10');
   });
 
   it('repairs charge per module and per tower on owned cells', () => {

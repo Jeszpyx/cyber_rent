@@ -246,6 +246,48 @@ button {
   transform: rotate(45deg);
 }
 
+/* постройки — на цветной полоске района */
+.cell-buildings {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.25cqi;
+  height: 2.2cqi;
+}
+
+.cell-buildings .module,
+.cell-buildings .tower {
+  height: 1.3cqi;
+  border: 1px solid #0b0716;
+  border-radius: 1px;
+}
+
+.cell-buildings .module {
+  width: 1.3cqi;
+  background: #2eff8c;
+}
+
+.cell-buildings .tower {
+  width: 3.4cqi;
+  height: 1.6cqi;
+  background: #ff2e5b;
+  box-shadow: 0 0 4px #ff2e5b;
+}
+
+/* заложенная клетка — приглушена и заштрихована */
+.cell.mortgaged {
+  background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgb(255 255 255 / 7%) 6px 9px);
+}
+
+.cell.mortgaged .cell-name,
+.cell.mortgaged .cell-icon,
+.cell.mortgaged .cell-stripe {
+  opacity: 0.45;
+}
+
 .tokens {
   position: absolute;
   left: 0.3cqi;
@@ -347,6 +389,10 @@ button {
   color: var(--muted);
   font-size: 0.85em;
   text-align: center;
+}
+
+.debt-hint {
+  color: #ff8a1f;
 }
 
 @keyframes blink {
@@ -471,8 +517,9 @@ button {
 }
 
 .cell-card {
+  max-height: calc(100dvh - 32px);
   padding: 0 0 16px;
-  overflow: hidden;
+  overflow: hidden auto;
   border-width: 2px;
 }
 
@@ -526,4 +573,43 @@ button {
   font-size: 1.2rem;
   font-weight: 700;
   color: var(--accent-2);
+}
+
+.rent-table {
+  width: 100%;
+  margin: 8px 0;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.rent-table td {
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.rent-table td:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rent-table small {
+  color: var(--muted);
+}
+
+.rent-table tr.active td {
+  color: var(--accent-2);
+  font-weight: 700;
+}
+
+.mortgaged-label {
+  color: #ff8a1f;
+}
+
+.cell-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
 }

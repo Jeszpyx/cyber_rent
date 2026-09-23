@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { BAIL, BOARD, ISOLATION_ATTEMPTS } from '../../shared/game/board';
 import { CARD_BY_ID } from '../../shared/game/cards';
-import { currentPlayer, type NewGameOptions } from '../../shared/game/engine';
+import { canBuild, ownedCells } from '../../shared/game/economy';
+import { actingPlayer, currentPlayer, type NewGameOptions } from '../../shared/game/engine';
 import type { OwnableCell } from '../../shared/game/types';
 import { useGame } from '../hooks/useGame';
 import { Board } from './Board';
@@ -21,7 +22,12 @@ export function Game({ options, onRestart }: Props) {
   const [selectedCell, setSelectedCell] = useState<number | null>(null);
 
   const player = currentPlayer(state);
-  const humanTurn = !player.isBot && state.phase !== 'gameOver';
+  // Решает должник в фазе 'debt', иначе — тот, чей ход.
+  const actor = actingPlayer(state);
+  const humanTurn = !actor.isBot && state.phase !== 'gameOver';
+  const debt = state.phase === 'debt' ? state.debt : null;
+  const creditor = debt?.to ? state.players.find((p) => p.id === debt.to) : null;
+  const canDevelop = humanTurn && ownedCells(state, actor.id).some((i) => canBuild(state, i));
   const winner = state.players.find((p) => p.id === state.winnerId);
   const buyCell = state.phase === 'buyDecision' ? (BOARD[player.position] as OwnableCell) : null;
   const drawnCard = state.phase === 'card' && state.pendingCard ? CARD_BY_ID[state.pendingCard] : null;
@@ -73,12 +79,33 @@ export function Game({ options, onRestart }: Props) {
               Завершить ход
             </button>
           )}
+          {humanTurn && debt && (
+            <>
+              <button
+                className="btn primary"
+                disabled={actor.money < debt.amount}
+                onClick={() => dispatch({ type: 'PAY_DEBT' })}
+              >
+                Заплатить {debt.amount}₵
+              </button>
+              <button className="btn" onClick={() => dispatch({ type: 'DECLARE_BANKRUPTCY' })}>
+                Сдаться
+              </button>
+            </>
+          )}
           {!humanTurn && state.phase !== 'gameOver' && <span className="thinking">бот думает…</span>}
         </div>
         {buyCell && humanTurn && <div className="buy-hint">«{buyCell.name}» свободен</div>}
         {state.phase === 'isolation' && humanTurn && (
           <div className="buy-hint">Изолятор: дубль — свобода, после {ISOLATION_ATTEMPTS}-й неудачи — залог.</div>
         )}
+        {debt && humanTurn && (
+          <div className="buy-hint debt-hint">
+            Долг {debt.amount}₵ {creditor ? `игроку ${creditor.name}` : 'банку'}, наличных {actor.money}₵. Нажмите на свою
+            клетку, чтобы продать постройки или заложить её.
+          </div>
+        )}
+        {canDevelop && <div className="buy-hint">Квартал ваш целиком — нажмите на район, чтобы строить.</div>}
       </Board>
 
       <aside className="side">
@@ -100,7 +127,13 @@ export function Game({ options, onRestart }: Props) {
       </aside>
 
       {selectedCell !== null && (
-        <CellCard state={state} index={selectedCell} onClose={() => setSelectedCell(null)} />
+        <CellCard
+          state={state}
+          index={selectedCell}
+          managerId={humanTurn ? actor.id : null}
+          dispatch={dispatch}
+          onClose={() => setSelectedCell(null)}
+        />
       )}
 
       {drawnCard && (

@@ -14,9 +14,12 @@ interface CellBase {
   short: string;
 }
 
+/** Рента района: [0] без построек, [1..4] — модули, [5] — небоскрёб */
+export type RentTable = [number, number, number, number, number, number];
+
 export type Cell =
   | (CellBase & { kind: 'start' })
-  | (CellBase & { kind: 'district'; group: DistrictGroup; price: number; rent: number })
+  | (CellBase & { kind: 'district'; group: DistrictGroup; price: number; rent: RentTable })
   | (CellBase & { kind: 'transit'; price: number })
   | (CellBase & { kind: 'utility'; price: number })
   | (CellBase & { kind: 'tax'; amount: number })
@@ -64,8 +67,26 @@ export interface Player {
   isolation: { turnsLeft: number } | null;
 }
 
-/** 'isolation' — начало хода в Изоляторе: ROLL (на дубль), PAY_BAIL или USE_RELEASE_CARD */
-export type Phase = 'roll' | 'isolation' | 'buyDecision' | 'card' | 'end' | 'gameOver';
+/**
+ * 'isolation' — начало хода в Изоляторе: ROLL (на дубль), PAY_BAIL или USE_RELEASE_CARD.
+ * 'debt' — должнику (state.debt, не обязательно текущему игроку) не хватает наличных:
+ * SELL_BUILDING / MORTGAGE, затем PAY_DEBT или DECLARE_BANKRUPTCY.
+ */
+export type Phase = 'roll' | 'isolation' | 'buyDecision' | 'card' | 'debt' | 'end' | 'gameOver';
+
+/** Обязательный платёж; to === null — банку */
+export interface Payment {
+  from: string;
+  to: string | null;
+  amount: number;
+}
+
+export interface Debt extends Payment {
+  /** платежи, которые ждут своей очереди после этого долга */
+  queue: Payment[];
+  /** чем продолжить ход после расчёта: 'finish' — finishMove, 'move' — выход из Изолятора и ход на сумму кубиков */
+  then: 'finish' | 'move';
+}
 
 export interface LogEntry {
   id: number;
@@ -82,8 +103,12 @@ export interface GameState {
   doublesInRow: number;
   /** cell index → owner player id */
   owners: Record<number, string>;
-  /** cell index → уровень застройки: 1–4 модуля, 5 — небоскрёб (заполняется в блоке C) */
+  /** cell index → уровень застройки: 1–4 модуля, 5 — небоскрёб; 0 не хранится */
   buildings: Record<number, number>;
+  /** заложенные клетки: рента не берётся, строить в квартале нельзя */
+  mortgaged: Record<number, true>;
+  /** неоплаченный платёж в фазе 'debt' */
+  debt: Debt | null;
   /** id карточек, верх колоды — первый элемент */
   decks: Record<CardDeck, string[]>;
   /** вытянутая карточка, ждёт APPLY_CARD */
@@ -101,4 +126,10 @@ export type Action =
   | { type: 'APPLY_CARD' }
   | { type: 'PAY_BAIL' }
   | { type: 'USE_RELEASE_CARD' }
+  | { type: 'BUILD'; index: number }
+  | { type: 'SELL_BUILDING'; index: number }
+  | { type: 'MORTGAGE'; index: number }
+  | { type: 'UNMORTGAGE'; index: number }
+  | { type: 'PAY_DEBT' }
+  | { type: 'DECLARE_BANKRUPTCY' }
   | { type: 'END_TURN' };

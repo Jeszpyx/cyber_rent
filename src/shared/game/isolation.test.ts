@@ -103,10 +103,12 @@ describe('turn in Isolation', () => {
     const state = inIsolation(newGame(), 1);
     state.players[0].money = BAIL - 1;
     state.owners[13] = 'p0';
+    state.mortgaged[13] = true;
     resolveRoll(state, [1, 2]);
     expect(state.players[0].bankrupt).toBe(true);
     expect(state.players[0].isolation).toBeNull();
     expect(state.owners[13]).toBeUndefined();
+    expect(state.mortgaged[13]).toBeUndefined();
     expect(state.phase).toBe('gameOver');
     expect(state.winnerId).toBe('p1');
   });

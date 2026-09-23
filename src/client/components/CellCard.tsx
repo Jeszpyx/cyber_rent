@@ -2,13 +2,27 @@ import {
   BAIL,
   BOARD,
   DOUBLES_TO_ISOLATION,
+  GROUP_BUILD_COST,
   GROUP_COLORS,
   ISOLATION_ATTEMPTS,
   START_SALARY,
+  TOWER_LEVEL,
+  TRANSIT_RENT,
+  UTILITY_MULTIPLIERS,
   groupCells,
   isOwnable,
 } from '../../shared/game/board';
-import type { Cell, GameState } from '../../shared/game/types';
+import {
+  buildCost,
+  canBuild,
+  canMortgage,
+  canSellBuilding,
+  canUnmortgage,
+  mortgageValue,
+  sellBuildingResult,
+  unmortgageCost,
+} from '../../shared/game/economy';
+import type { Action, Cell, GameState } from '../../shared/game/types';
 
 const KIND_LABELS: Record<string, string> = {
   start: 'Стартовая точка',
@@ -30,15 +44,14 @@ function description(cell: Cell): string[] {
     case 'district': {
       const group = groupCells(cell.group).map((i) => BOARD[i].name).join(', ');
       return [
-        `Рента: ${cell.rent}₵`,
-        `Рента при владении всем кварталом: ${cell.rent * 2}₵`,
         `Квартал: ${group}`,
+        `Модуль и небоскрёб — по ${GROUP_BUILD_COST[cell.group]}₵. Строить можно, владея всем кварталом без залогов, равномерно.`,
       ];
     }
     case 'transit':
-      return ['Рента зависит от числа станций у владельца: 25 / 50 / 100 / 200₵.'];
+      return [`Рента зависит от числа станций у владельца: ${TRANSIT_RENT.join(' / ')}₵.`];
     case 'utility':
-      return ['Рента: сумма кубиков ×4, при владении обеими — ×10.'];
+      return [`Рента: сумма кубиков ×${UTILITY_MULTIPLIERS[0]}, при владении обеими — ×${UTILITY_MULTIPLIERS[1]}.`];
     case 'tax':
       return [`Игрок платит ${cell.amount}₵ банку.`];
     case 'hack':
@@ -63,16 +76,29 @@ function description(cell: Cell): string[] {
   }
 }
 
+const RENT_LABELS = ['Без построек', '1 модуль', '2 модуля', '3 модуля', '4 модуля', 'Небоскрёб'];
+
+function buildingsLabel(level: number): string {
+  if (level >= TOWER_LEVEL) return 'небоскрёб';
+  return level === 0 ? 'нет' : `${level} ${level === 1 ? 'модуль' : 'модуля'}`;
+}
+
 interface Props {
   state: GameState;
   index: number;
+  /** Человек, который сейчас может управлять своей собственностью; null — кнопок нет */
+  managerId: string | null;
+  dispatch: (action: Action) => void;
   onClose: () => void;
 }
 
-export function CellCard({ state, index, onClose }: Props) {
+export function CellCard({ state, index, managerId, dispatch, onClose }: Props) {
   const cell = BOARD[index];
   const owner = state.players.find((p) => p.id === state.owners[index]);
   const color = cell.kind === 'district' ? GROUP_COLORS[cell.group] : 'var(--accent)';
+  const level = state.buildings[index] ?? 0;
+  const mortgaged = Boolean(state.mortgaged[index]);
+  const manageable = isOwnable(cell) && managerId !== null && owner?.id === managerId;
 
   return (
     <div className="overlay" onClick={onClose}>
@@ -86,13 +112,58 @@ export function CellCard({ state, index, onClose }: Props) {
           {description(cell).map((line) => (
             <p key={line}>{line}</p>
           ))}
+          {cell.kind === 'district' && (
+            <table className="rent-table">
+              <tbody>
+                {cell.rent.map((value, i) => (
+                  <tr key={i} className={owner && i === level ? 'active' : undefined}>
+                    <td>{RENT_LABELS[i]}</td>
+                    <td>
+                      {value}₵{i === 0 && <small> (весь квартал — {value * 2}₵)</small>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {isOwnable(cell) && (
+            <p>
+              Залог: {mortgageValue(cell)}₵, выкуп {unmortgageCost(cell)}₵. На заложенной клетке рента не берётся.
+            </p>
+          )}
           {isOwnable(cell) && (
             <p>
               Владелец:{' '}
               {owner ? <b style={{ color: owner.color }}>{owner.name}</b> : <b>свободно</b>}
+              {mortgaged && <b className="mortgaged-label"> · в залоге</b>}
             </p>
           )}
+          {cell.kind === 'district' && owner && <p>Застройка: {buildingsLabel(level)}</p>}
         </div>
+        {manageable && (
+          <div className="cell-card-actions">
+            {canBuild(state, index) && (
+              <button className="btn small primary" onClick={() => dispatch({ type: 'BUILD', index })}>
+                {level + 1 === TOWER_LEVEL ? 'Небоскрёб' : 'Модуль'} −{buildCost(index)}₵
+              </button>
+            )}
+            {canSellBuilding(state, index) && (
+              <button className="btn small" onClick={() => dispatch({ type: 'SELL_BUILDING', index })}>
+                Продать постройку +{sellBuildingResult(state, index).refund}₵
+              </button>
+            )}
+            {canMortgage(state, index) && (
+              <button className="btn small" onClick={() => dispatch({ type: 'MORTGAGE', index })}>
+                Заложить +{mortgageValue(cell)}₵
+              </button>
+            )}
+            {canUnmortgage(state, index) && (
+              <button className="btn small" onClick={() => dispatch({ type: 'UNMORTGAGE', index })}>
+                Выкупить −{unmortgageCost(cell)}₵
+              </button>
+            )}
+          </div>
+        )}
         <button className="btn" onClick={onClose}>
           Закрыть
         </button>

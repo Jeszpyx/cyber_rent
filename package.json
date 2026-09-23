@@ -9,7 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json && vite build",
     "start": "node dist/server/index.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "simulate": "tsc -p tsconfig.sim.json && node dist/sim/scripts/simulate.js"
   },
   "engines": {
     "node": ">=22.12.0"
