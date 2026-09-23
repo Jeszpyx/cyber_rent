@@ -1,4 +1,15 @@
-import { BOARD, ISOLATION_INDEX, START_MONEY, START_SALARY, TOWER_LEVEL, groupCells, isOwnable } from './board';
+import {
+  BAIL,
+  BOARD,
+  DOUBLES_TO_ISOLATION,
+  ISOLATION_ATTEMPTS,
+  ISOLATION_INDEX,
+  START_MONEY,
+  START_SALARY,
+  TOWER_LEVEL,
+  groupCells,
+  isOwnable,
+} from './board';
 import { CARD_BY_ID, DECK_NAMES, deckCardIds } from './cards';
 import { rollDie, shuffle } from './rng';
 import type { Action, Card, CardDeck, GameState, OwnableCell, Player } from './types';
@@ -15,7 +26,7 @@ export interface NewGameOptions {
 
 export function createGame({ playerName, bots, seed }: NewGameOptions): GameState {
   const players: Player[] = [
-    { id: 'p0', name: playerName, isBot: false, color: PLAYER_COLORS[0], money: START_MONEY, position: 0, bankrupt: false, releaseCards: [] },
+    { id: 'p0', name: playerName, isBot: false, color: PLAYER_COLORS[0], money: START_MONEY, position: 0, bankrupt: false, releaseCards: [], isolation: null },
   ];
   for (let i = 0; i < bots; i++) {
     players.push({
@@ -27,6 +38,7 @@ export function createGame({ playerName, bots, seed }: NewGameOptions): GameStat
       position: 0,
       bankrupt: false,
       releaseCards: [],
+      isolation: null,
     });
   }
   const [hack, s1] = shuffle(deckCardIds('hack'), seed ?? Math.floor(Math.random() * 2 ** 31));
@@ -37,6 +49,7 @@ export function createGame({ playerName, bots, seed }: NewGameOptions): GameStat
     phase: 'roll',
     dice: null,
     rolledDouble: false,
+    doublesInRow: 0,
     owners: {},
     buildings: {},
     decks: { hack, net },
@@ -58,7 +71,7 @@ export function applyAction(prev: GameState, action: Action): GameState {
   if (prev.phase === 'gameOver') return prev;
   switch (action.type) {
     case 'ROLL': {
-      if (prev.phase !== 'roll') return prev;
+      if (prev.phase !== 'roll' && prev.phase !== 'isolation') return prev;
       const state = structuredClone(prev);
       const [d1, s1] = rollDie(state.seed);
       const [d2, s2] = rollDie(s1);
@@ -93,6 +106,25 @@ export function applyAction(prev: GameState, action: Action): GameState {
       applyCard(state, card);
       return state;
     }
+    case 'PAY_BAIL': {
+      if (prev.phase !== 'isolation' || currentPlayer(prev).money < BAIL) return prev;
+      const state = structuredClone(prev);
+      const player = currentPlayer(state);
+      log(state, `${player.name} платит залог ${BAIL}₵ и выходит из Изолятора.`);
+      pay(state, player, null, BAIL);
+      release(state, player);
+      return state;
+    }
+    case 'USE_RELEASE_CARD': {
+      if (prev.phase !== 'isolation' || currentPlayer(prev).releaseCards.length === 0) return prev;
+      const state = structuredClone(prev);
+      const player = currentPlayer(state);
+      const id = player.releaseCards.shift()!;
+      state.decks[CARD_BY_ID[id].deck].push(id);
+      log(state, `${player.name} использует карточку освобождения и выходит из Изолятора.`);
+      release(state, player);
+      return state;
+    }
     case 'END_TURN': {
       if (prev.phase !== 'end') return prev;
       const state = structuredClone(prev);
@@ -109,7 +141,45 @@ export function resolveRoll(state: GameState, dice: [number, number]): void {
   state.dice = dice;
   state.rolledDouble = d1 === d2;
   log(state, `${player.name} бросает ${d1} и ${d2}${state.rolledDouble ? ' — дубль!' : '.'}`);
+  if (player.isolation) {
+    rollInIsolation(state, player);
+    return;
+  }
+  if (state.rolledDouble) {
+    state.doublesInRow += 1;
+    if (state.doublesInRow >= DOUBLES_TO_ISOLATION) {
+      log(state, `${DOUBLES_TO_ISOLATION} дубля подряд — дроны безопасности засекли ${player.name}.`);
+      sendToIsolation(state, player);
+      finishMove(state);
+      return;
+    }
+  }
   moveBy(state, player, d1 + d2);
+  landOn(state);
+}
+
+/** Бросок из Изолятора: дубль освобождает без повторного хода, после последней неудачи — принудительный залог. */
+function rollInIsolation(state: GameState, player: Player): void {
+  const isolation = player.isolation!;
+  if (state.rolledDouble) {
+    log(state, `${player.name} выбрасывает дубль и выходит из Изолятора.`);
+  } else {
+    isolation.turnsLeft -= 1;
+    if (isolation.turnsLeft > 0) {
+      log(state, `Дубля нет — ${player.name} остаётся в Изоляторе. Попыток: ${isolation.turnsLeft}.`);
+      finishMove(state);
+      return;
+    }
+    log(state, `Попытки кончились: ${player.name} платит залог ${BAIL}₵.`);
+    pay(state, player, null, BAIL);
+    if (player.bankrupt) {
+      finishMove(state);
+      return;
+    }
+  }
+  player.isolation = null;
+  state.rolledDouble = false;
+  moveBy(state, player, diceSum(state));
   landOn(state);
 }
 
@@ -245,8 +315,16 @@ function paySalary(state: GameState, player: Player): void {
 
 function sendToIsolation(state: GameState, player: Player): void {
   player.position = ISOLATION_INDEX;
+  player.isolation = { turnsLeft: ISOLATION_ATTEMPTS };
   state.rolledDouble = false;
+  state.doublesInRow = 0;
   log(state, `${player.name} отправляется в Изолятор.`);
+}
+
+/** Выход из Изолятора до броска: дальше обычный ход. */
+function release(state: GameState, player: Player): void {
+  player.isolation = null;
+  state.phase = 'roll';
 }
 
 function opponents(state: GameState, player: Player): Player[] {
@@ -268,6 +346,7 @@ function bankrupt(state: GameState, player: Player): void {
   }
   for (const id of player.releaseCards) state.decks[CARD_BY_ID[id].deck].push(id);
   player.releaseCards = [];
+  player.isolation = null;
   log(state, `${player.name} банкрот и выбывает из игры.`);
 
   const alive = state.players.filter((p) => !p.bankrupt);
@@ -289,11 +368,13 @@ function nextPlayer(state: GameState): void {
   do {
     next = (next + 1) % state.players.length;
   } while (state.players[next].bankrupt);
+  const player = state.players[next];
   state.currentPlayer = next;
-  state.phase = 'roll';
+  state.phase = player.isolation ? 'isolation' : 'roll';
   state.dice = null;
   state.rolledDouble = false;
-  log(state, `Ход игрока ${state.players[next].name}.`);
+  state.doublesInRow = 0;
+  log(state, `Ход игрока ${player.name}${player.isolation ? ' (в Изоляторе)' : ''}.`);
 }
 
 function log(state: GameState, text: string): void {

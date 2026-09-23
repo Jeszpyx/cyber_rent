@@ -10,10 +10,11 @@ export function PlayerPanel({ state }: { state: GameState }) {
         if (p.bankrupt) classes.push('bankrupt');
         return (
           <li key={p.id} className={classes.join(' ')} style={{ borderColor: p.color }}>
-            <span className="token big" style={{ background: p.color }} />
+            <span className={p.isolation ? 'token big isolated' : 'token big'} style={{ background: p.color }} />
             <span className="player-name">{p.name}</span>
             <span className="player-owned">
               🏢 {owned}
+              {p.isolation && <span title={`В Изоляторе, попыток: ${p.isolation.turnsLeft}`}> ⛓{p.isolation.turnsLeft}</span>}
               {p.releaseCards.length > 0 && <span title="Карточка освобождения"> 🔓{p.releaseCards.length}</span>}
             </span>
             <span className="player-money">{p.money}₵</span>

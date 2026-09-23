@@ -38,7 +38,12 @@ export function Cell({ cell, row, col, ownerColor, tokens, onClick }: Props) {
       {tokens.length > 0 && (
         <span className="tokens">
           {tokens.map((p) => (
-            <span key={p.id} className="token" style={{ background: p.color }} />
+            <span
+              key={p.id}
+              className={p.isolation ? 'token isolated' : 'token'}
+              style={{ background: p.color }}
+              title={p.isolation ? `${p.name} в Изоляторе` : p.name}
+            />
           ))}
         </span>
       )}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BOARD } from '../../shared/game/board';
+import { BAIL, BOARD, ISOLATION_ATTEMPTS } from '../../shared/game/board';
 import { CARD_BY_ID } from '../../shared/game/cards';
 import { currentPlayer, type NewGameOptions } from '../../shared/game/engine';
 import type { OwnableCell } from '../../shared/game/types';
@@ -39,6 +39,25 @@ export function Game({ options, onRestart }: Props) {
               Бросить кубики
             </button>
           )}
+          {humanTurn && state.phase === 'isolation' && player.isolation && (
+            <>
+              <button className="btn primary" onClick={() => dispatch({ type: 'ROLL' })}>
+                Бросок на дубль {ISOLATION_ATTEMPTS - player.isolation.turnsLeft + 1}/{ISOLATION_ATTEMPTS}
+              </button>
+              <button
+                className="btn"
+                disabled={player.money < BAIL}
+                onClick={() => dispatch({ type: 'PAY_BAIL' })}
+              >
+                Залог {BAIL}₵
+              </button>
+              {player.releaseCards.length > 0 && (
+                <button className="btn" onClick={() => dispatch({ type: 'USE_RELEASE_CARD' })}>
+                  🔓 Карточка
+                </button>
+              )}
+            </>
+          )}
           {humanTurn && buyCell && (
             <>
               <button className="btn primary" onClick={() => dispatch({ type: 'BUY' })}>
@@ -57,6 +76,9 @@ export function Game({ options, onRestart }: Props) {
           {!humanTurn && state.phase !== 'gameOver' && <span className="thinking">бот думает…</span>}
         </div>
         {buyCell && humanTurn && <div className="buy-hint">«{buyCell.name}» свободен</div>}
+        {state.phase === 'isolation' && humanTurn && (
+          <div className="buy-hint">Изолятор: дубль — свобода, после {ISOLATION_ATTEMPTS}-й неудачи — залог.</div>
+        )}
       </Board>
 
       <aside className="side">

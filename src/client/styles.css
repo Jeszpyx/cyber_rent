@@ -265,6 +265,13 @@ button {
   box-shadow: 0 0 6px currentColor;
 }
 
+/* решётка поверх фишки задержанного */
+.token.isolated {
+  border-color: #ff2e5b;
+  background-image: repeating-linear-gradient(90deg, transparent 0 22%, rgb(11 7 22 / 80%) 22% 36%);
+  box-shadow: 0 0 6px #ff2e5b;
+}
+
 .token.big {
   width: 14px;
   height: 14px;
@@ -315,6 +322,11 @@ button {
   border-radius: 12%;
   color: var(--muted);
   text-shadow: none;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .actions {

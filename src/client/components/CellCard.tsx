@@ -1,4 +1,13 @@
-import { BOARD, GROUP_COLORS, START_SALARY, groupCells, isOwnable } from '../../shared/game/board';
+import {
+  BAIL,
+  BOARD,
+  DOUBLES_TO_ISOLATION,
+  GROUP_COLORS,
+  ISOLATION_ATTEMPTS,
+  START_SALARY,
+  groupCells,
+  isOwnable,
+} from '../../shared/game/board';
 import type { Cell, GameState } from '../../shared/game/types';
 
 const KIND_LABELS: Record<string, string> = {
@@ -39,9 +48,16 @@ function description(cell: Cell): string[] {
         'Карточку освобождения из Изолятора можно оставить себе.',
       ];
     case 'isolation':
-      return ['Здесь держат задержанных. Если просто проходите мимо — ничего не происходит.'];
+      return [
+        'Здесь держат задержанных. Если просто проходите мимо — ничего не происходит.',
+        `Выйти можно залогом ${BAIL}₵, карточкой освобождения или выбросив дубль (до ${ISOLATION_ATTEMPTS} попыток). После последней неудачи залог списывается сам.`,
+        'Рента за свою собственность в Изоляторе по-прежнему начисляется.',
+      ];
     case 'goToIsolation':
-      return ['Игрок немедленно отправляется в Изолятор.'];
+      return [
+        'Игрок немедленно отправляется в Изолятор, Старт не проходит.',
+        `${DOUBLES_TO_ISOLATION} дубля подряд за один ход тоже ведут в Изолятор.`,
+      ];
     case 'neutral':
       return ['Безопасная зона. Здесь ничего не происходит.'];
   }

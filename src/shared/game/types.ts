@@ -60,9 +60,12 @@ export interface Player {
   bankrupt: boolean;
   /** id карточек освобождения из Изолятора на руках */
   releaseCards: string[];
+  /** null — на свободе; turnsLeft — сколько попыток выбросить дубль осталось */
+  isolation: { turnsLeft: number } | null;
 }
 
-export type Phase = 'roll' | 'buyDecision' | 'card' | 'end' | 'gameOver';
+/** 'isolation' — начало хода в Изоляторе: ROLL (на дубль), PAY_BAIL или USE_RELEASE_CARD */
+export type Phase = 'roll' | 'isolation' | 'buyDecision' | 'card' | 'end' | 'gameOver';
 
 export interface LogEntry {
   id: number;
@@ -75,6 +78,8 @@ export interface GameState {
   phase: Phase;
   dice: [number, number] | null;
   rolledDouble: boolean;
+  /** дублей подряд за текущий ход; DOUBLES_TO_ISOLATION → в Изолятор */
+  doublesInRow: number;
   /** cell index → owner player id */
   owners: Record<number, string>;
   /** cell index → уровень застройки: 1–4 модуля, 5 — небоскрёб (заполняется в блоке C) */
@@ -94,4 +99,6 @@ export type Action =
   | { type: 'BUY' }
   | { type: 'SKIP_BUY' }
   | { type: 'APPLY_CARD' }
+  | { type: 'PAY_BAIL' }
+  | { type: 'USE_RELEASE_CARD' }
   | { type: 'END_TURN' };

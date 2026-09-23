@@ -3,6 +3,12 @@ import type { Cell, DistrictGroup, OwnableCell } from './types';
 export const START_MONEY = 1500;
 export const START_SALARY = 200;
 export const ISOLATION_INDEX = 10;
+/** Залог за выход из Изолятора */
+export const BAIL = 50;
+/** Попыток выбросить дубль; после последней неудачной залог списывается принудительно */
+export const ISOLATION_ATTEMPTS = 3;
+/** Столько дублей подряд за ход — и игрок отправляется в Изолятор */
+export const DOUBLES_TO_ISOLATION = 3;
 /** Уровень застройки «небоскрёб»; 1–4 — модули */
 export const TOWER_LEVEL = 5;
 
