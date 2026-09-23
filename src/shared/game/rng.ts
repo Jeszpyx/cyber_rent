@@ -6,6 +6,19 @@ export function nextRandom(seed: number): [number, number] {
   return [((r ^ (r >>> 14)) >>> 0) / 4294967296, t];
 }
 
+/** Fisher–Yates: returns [shuffled copy, next seed] */
+export function shuffle<T>(items: readonly T[], seed: number): [T[], number] {
+  const result = items.slice();
+  let s = seed;
+  for (let i = result.length - 1; i > 0; i--) {
+    const [value, next] = nextRandom(s);
+    s = next;
+    const j = Math.floor(value * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return [result, s];
+}
+
 export function rollDie(seed: number): [number, number] {
   const [value, next] = nextRandom(seed);
   return [Math.floor(value * 6) + 1, next];

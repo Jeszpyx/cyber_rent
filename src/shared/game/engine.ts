@@ -1,6 +1,7 @@
-import { BOARD, ISOLATION_INDEX, START_MONEY, START_SALARY, groupCells, isOwnable } from './board';
-import { rollDie } from './rng';
-import type { Action, GameState, OwnableCell, Player } from './types';
+import { BOARD, ISOLATION_INDEX, START_MONEY, START_SALARY, TOWER_LEVEL, groupCells, isOwnable } from './board';
+import { CARD_BY_ID, DECK_NAMES, deckCardIds } from './cards';
+import { rollDie, shuffle } from './rng';
+import type { Action, Card, CardDeck, GameState, OwnableCell, Player } from './types';
 
 const LOG_LIMIT = 60;
 const PLAYER_COLORS = ['#3ee6ff', '#ff2e9a', '#ffe14d', '#2eff8c'];
@@ -14,7 +15,7 @@ export interface NewGameOptions {
 
 export function createGame({ playerName, bots, seed }: NewGameOptions): GameState {
   const players: Player[] = [
-    { id: 'p0', name: playerName, isBot: false, color: PLAYER_COLORS[0], money: START_MONEY, position: 0, bankrupt: false },
+    { id: 'p0', name: playerName, isBot: false, color: PLAYER_COLORS[0], money: START_MONEY, position: 0, bankrupt: false, releaseCards: [] },
   ];
   for (let i = 0; i < bots; i++) {
     players.push({
@@ -25,8 +26,11 @@ export function createGame({ playerName, bots, seed }: NewGameOptions): GameStat
       money: START_MONEY,
       position: 0,
       bankrupt: false,
+      releaseCards: [],
     });
   }
+  const [hack, s1] = shuffle(deckCardIds('hack'), seed ?? Math.floor(Math.random() * 2 ** 31));
+  const [net, s2] = shuffle(deckCardIds('net'), s1);
   const state: GameState = {
     players,
     currentPlayer: 0,
@@ -34,7 +38,10 @@ export function createGame({ playerName, bots, seed }: NewGameOptions): GameStat
     dice: null,
     rolledDouble: false,
     owners: {},
-    seed: seed ?? Math.floor(Math.random() * 2 ** 31),
+    buildings: {},
+    decks: { hack, net },
+    pendingCard: null,
+    seed: s2,
     log: [],
     logCounter: 0,
     winnerId: null,
@@ -78,6 +85,14 @@ export function applyAction(prev: GameState, action: Action): GameState {
       finishMove(state);
       return state;
     }
+    case 'APPLY_CARD': {
+      if (prev.phase !== 'card' || prev.pendingCard === null) return prev;
+      const state = structuredClone(prev);
+      const card = CARD_BY_ID[state.pendingCard!];
+      state.pendingCard = null;
+      applyCard(state, card);
+      return state;
+    }
     case 'END_TURN': {
       if (prev.phase !== 'end') return prev;
       const state = structuredClone(prev);
@@ -94,14 +109,13 @@ export function resolveRoll(state: GameState, dice: [number, number]): void {
   state.dice = dice;
   state.rolledDouble = d1 === d2;
   log(state, `${player.name} бросает ${d1} и ${d2}${state.rolledDouble ? ' — дубль!' : '.'}`);
+  moveBy(state, player, d1 + d2);
+  landOn(state);
+}
 
-  const target = player.position + d1 + d2;
-  if (target >= BOARD.length) {
-    player.money += START_SALARY;
-    log(state, `${player.name} проходит Старт и получает ${START_SALARY}₵.`);
-  }
-  player.position = target % BOARD.length;
-
+/** Resolves the cell the current player stands on. Ends with a decision phase or finishMove. */
+function landOn(state: GameState): void {
+  const player = currentPlayer(state);
   const cell = BOARD[player.position];
   log(state, `${player.name} попадает на «${cell.name}».`);
 
@@ -114,7 +128,7 @@ export function resolveRoll(state: GameState, dice: [number, number]): void {
       }
       log(state, `У ${player.name} не хватает денег на покупку.`);
     } else if (ownerId !== player.id) {
-      const rent = calculateRent(state, cell, d1 + d2);
+      const rent = calculateRent(state, cell, diceSum(state));
       const owner = state.players.find((p) => p.id === ownerId)!;
       log(state, `${player.name} платит ренту ${rent}₵ игроку ${owner.name}.`);
       pay(state, player, owner, rent);
@@ -123,13 +137,71 @@ export function resolveRoll(state: GameState, dice: [number, number]): void {
     log(state, `${player.name} платит ${cell.amount}₵.`);
     pay(state, player, null, cell.amount);
   } else if (cell.kind === 'goToIsolation') {
-    player.position = ISOLATION_INDEX;
-    state.rolledDouble = false;
-    log(state, `${player.name} отправляется в Изолятор.`);
+    sendToIsolation(state, player);
   } else if (cell.kind === 'hack' || cell.kind === 'net') {
-    log(state, `Карточки «${cell.name}» пока в разработке — ничего не происходит.`);
+    drawCard(state, cell.kind);
+    return;
   }
 
+  finishMove(state);
+}
+
+function drawCard(state: GameState, deck: CardDeck): void {
+  const player = currentPlayer(state);
+  const id = state.decks[deck].shift();
+  if (id === undefined) {
+    log(state, `Колода «${DECK_NAMES[deck]}» пуста.`);
+    finishMove(state);
+    return;
+  }
+  const card = CARD_BY_ID[id];
+  // Карточка освобождения остаётся у игрока и вернётся в колоду после использования.
+  if (card.effect.type !== 'getOutOfIsolation') state.decks[deck].push(id);
+  state.pendingCard = id;
+  state.phase = 'card';
+  log(state, `${player.name} тянет «${DECK_NAMES[deck]}»: ${card.text}`);
+}
+
+function applyCard(state: GameState, card: Card): void {
+  const player = currentPlayer(state);
+  const effect = card.effect;
+  switch (effect.type) {
+    case 'money':
+      if (effect.amount >= 0) player.money += effect.amount;
+      else pay(state, player, null, -effect.amount);
+      break;
+    case 'moveTo':
+      if (effect.index < player.position) paySalary(state, player);
+      player.position = effect.index;
+      landOn(state);
+      return;
+    case 'moveBy':
+      moveBy(state, player, effect.steps);
+      landOn(state);
+      return;
+    case 'goToIsolation':
+      sendToIsolation(state, player);
+      break;
+    case 'payEachPlayer':
+      for (const other of opponents(state, player)) {
+        if (player.bankrupt) break;
+        pay(state, player, other, effect.amount);
+      }
+      break;
+    case 'collectFromEachPlayer':
+      for (const other of opponents(state, player)) pay(state, other, player, effect.amount);
+      break;
+    case 'getOutOfIsolation':
+      player.releaseCards.push(card.id);
+      log(state, `${player.name} сохраняет карточку освобождения.`);
+      break;
+    case 'repairs': {
+      const cost = repairsCost(state, player, effect.perModule, effect.perTower);
+      log(state, `${player.name} платит за ремонт ${cost}₵.`);
+      if (cost > 0) pay(state, player, null, cost);
+      break;
+    }
+  }
   finishMove(state);
 }
 
@@ -146,6 +218,41 @@ export function calculateRent(state: GameState, cell: OwnableCell, diceSum: numb
   return diceSum * (sameKindOwned >= 2 ? 10 : 4);
 }
 
+function repairsCost(state: GameState, player: Player, perModule: number, perTower: number): number {
+  let cost = 0;
+  for (const [index, level] of Object.entries(state.buildings)) {
+    if (state.owners[Number(index)] !== player.id) continue;
+    cost += level >= TOWER_LEVEL ? perTower : level * perModule;
+  }
+  return cost;
+}
+
+function diceSum(state: GameState): number {
+  return state.dice ? state.dice[0] + state.dice[1] : 0;
+}
+
+/** Forward moves past Start pay salary; backward moves wrap without it. */
+function moveBy(state: GameState, player: Player, steps: number): void {
+  const target = player.position + steps;
+  if (target >= BOARD.length) paySalary(state, player);
+  player.position = ((target % BOARD.length) + BOARD.length) % BOARD.length;
+}
+
+function paySalary(state: GameState, player: Player): void {
+  player.money += START_SALARY;
+  log(state, `${player.name} проходит Старт и получает ${START_SALARY}₵.`);
+}
+
+function sendToIsolation(state: GameState, player: Player): void {
+  player.position = ISOLATION_INDEX;
+  state.rolledDouble = false;
+  log(state, `${player.name} отправляется в Изолятор.`);
+}
+
+function opponents(state: GameState, player: Player): Player[] {
+  return state.players.filter((p) => p !== player && !p.bankrupt);
+}
+
 function pay(state: GameState, from: Player, to: Player | null, amount: number): void {
   const paid = Math.min(amount, from.money);
   from.money -= amount;
@@ -159,6 +266,8 @@ function bankrupt(state: GameState, player: Player): void {
   for (const [index, ownerId] of Object.entries(state.owners)) {
     if (ownerId === player.id) delete state.owners[Number(index)];
   }
+  for (const id of player.releaseCards) state.decks[CARD_BY_ID[id].deck].push(id);
+  player.releaseCards = [];
   log(state, `${player.name} банкрот и выбывает из игры.`);
 
   const alive = state.players.filter((p) => !p.bankrupt);

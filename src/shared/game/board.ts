@@ -3,6 +3,8 @@ import type { Cell, DistrictGroup, OwnableCell } from './types';
 export const START_MONEY = 1500;
 export const START_SALARY = 200;
 export const ISOLATION_INDEX = 10;
+/** Уровень застройки «небоскрёб»; 1–4 — модули */
+export const TOWER_LEVEL = 5;
 
 export const GROUP_COLORS: Record<DistrictGroup, string> = {
   rust: '#9b5b3a',

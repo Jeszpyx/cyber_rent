@@ -12,7 +12,10 @@ export function PlayerPanel({ state }: { state: GameState }) {
           <li key={p.id} className={classes.join(' ')} style={{ borderColor: p.color }}>
             <span className="token big" style={{ background: p.color }} />
             <span className="player-name">{p.name}</span>
-            <span className="player-owned">🏢 {owned}</span>
+            <span className="player-owned">
+              🏢 {owned}
+              {p.releaseCards.length > 0 && <span title="Карточка освобождения"> 🔓{p.releaseCards.length}</span>}
+            </span>
             <span className="player-money">{p.money}₵</span>
           </li>
         );

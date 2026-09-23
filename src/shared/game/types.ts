@@ -28,6 +28,28 @@ export type Cell =
 
 export type OwnableCell = Extract<Cell, { price: number }>;
 
+export type CardDeck = 'hack' | 'net';
+
+export type CardEffect =
+  /** amount > 0 — получить от банка, < 0 — заплатить банку */
+  | { type: 'money'; amount: number }
+  /** переход на клетку; за проход Старта — зарплата */
+  | { type: 'moveTo'; index: number }
+  /** steps < 0 — назад (без зарплаты за Старт) */
+  | { type: 'moveBy'; steps: number }
+  | { type: 'goToIsolation' }
+  | { type: 'payEachPlayer'; amount: number }
+  | { type: 'collectFromEachPlayer'; amount: number }
+  | { type: 'getOutOfIsolation' }
+  | { type: 'repairs'; perModule: number; perTower: number };
+
+export interface Card {
+  id: string;
+  deck: CardDeck;
+  text: string;
+  effect: CardEffect;
+}
+
 export interface Player {
   id: string;
   name: string;
@@ -36,9 +58,11 @@ export interface Player {
   money: number;
   position: number;
   bankrupt: boolean;
+  /** id карточек освобождения из Изолятора на руках */
+  releaseCards: string[];
 }
 
-export type Phase = 'roll' | 'buyDecision' | 'end' | 'gameOver';
+export type Phase = 'roll' | 'buyDecision' | 'card' | 'end' | 'gameOver';
 
 export interface LogEntry {
   id: number;
@@ -53,6 +77,12 @@ export interface GameState {
   rolledDouble: boolean;
   /** cell index → owner player id */
   owners: Record<number, string>;
+  /** cell index → уровень застройки: 1–4 модуля, 5 — небоскрёб (заполняется в блоке C) */
+  buildings: Record<number, number>;
+  /** id карточек, верх колоды — первый элемент */
+  decks: Record<CardDeck, string[]>;
+  /** вытянутая карточка, ждёт APPLY_CARD */
+  pendingCard: string | null;
   seed: number;
   log: LogEntry[];
   logCounter: number;
@@ -63,4 +93,5 @@ export type Action =
   | { type: 'ROLL' }
   | { type: 'BUY' }
   | { type: 'SKIP_BUY' }
+  | { type: 'APPLY_CARD' }
   | { type: 'END_TURN' };

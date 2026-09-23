@@ -487,6 +487,29 @@ button {
   margin: 6px 0;
 }
 
+.drawn-card {
+  --card-color: var(--accent);
+  border: 2px solid var(--card-color);
+  box-shadow: 0 0 30px color-mix(in srgb, var(--card-color) 35%, transparent);
+}
+
+.drawn-card.net {
+  --card-color: var(--accent-2);
+}
+
+.drawn-card-deck {
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--card-color);
+}
+
+.drawn-card-text {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.4;
+}
+
 .cell-card .price {
   font-size: 1.2rem;
   font-weight: 700;

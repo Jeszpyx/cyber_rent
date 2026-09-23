@@ -134,7 +134,8 @@ docs/ROADMAP.md         # дорожная карта для агентов (с�
 - Данные (клетки, карточки, цены) — в файлах данных, не в коде логики.
 - Никаких оригинальных названий и терминов «Монополии» (Monopoly, Boardwalk, Chance, Community Chest и т. п.).
 
-### Блок A — Карточки событий
+### Блок A — Карточки событий (✅ выполнено)
+Реализация: данные в `cards.ts`, эффекты — `applyCard` в `engine.ts`, тесты в `cards.test.ts`. Вытянутая карточка переводит игру в фазу `'card'` (`state.pendingCard`), эффект применяется по Action `APPLY_CARD`. Для эффекта `repairs` в `GameState` уже есть `buildings` (1–4 модуля, 5 = небоскрёб, `TOWER_LEVEL`); блок C должен использовать это поле. Карточки освобождения лежат в `player.releaseCards`, после использования (B2) их нужно вернуть под низ колоды.
 - **A1.** `src/shared/game/cards.ts`: типы `Card { id, deck: 'hack' | 'net', text, effect }`; `effect` — размеченное объединение: `money`, `moveTo`, `moveBy`, `goToIsolation`, `payEachPlayer`, `collectFromEachPlayer`, `getOutOfIsolation`, `repairs`.
 - **A2.** По 16 карточек в колоды «Взлом» и «Сеть», тексты в киберпанк-теме.
 - **A3.** Колоды в `GameState`: перемешать seeded RNG при создании, тянуть сверху, класть вниз.

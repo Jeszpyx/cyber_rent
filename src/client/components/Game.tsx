@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { BOARD } from '../../shared/game/board';
+import { CARD_BY_ID } from '../../shared/game/cards';
 import { currentPlayer, type NewGameOptions } from '../../shared/game/engine';
 import type { OwnableCell } from '../../shared/game/types';
 import { useGame } from '../hooks/useGame';
@@ -7,6 +8,7 @@ import { Board } from './Board';
 import { BuildInfo } from './BuildInfo';
 import { CellCard } from './CellCard';
 import { Dice } from './Dice';
+import { DrawnCard } from './DrawnCard';
 import { PlayerPanel } from './PlayerPanel';
 
 interface Props {
@@ -22,6 +24,7 @@ export function Game({ options, onRestart }: Props) {
   const humanTurn = !player.isBot && state.phase !== 'gameOver';
   const winner = state.players.find((p) => p.id === state.winnerId);
   const buyCell = state.phase === 'buyDecision' ? (BOARD[player.position] as OwnableCell) : null;
+  const drawnCard = state.phase === 'card' && state.pendingCard ? CARD_BY_ID[state.pendingCard] : null;
 
   return (
     <div className="game">
@@ -76,6 +79,14 @@ export function Game({ options, onRestart }: Props) {
 
       {selectedCell !== null && (
         <CellCard state={state} index={selectedCell} onClose={() => setSelectedCell(null)} />
+      )}
+
+      {drawnCard && (
+        <DrawnCard
+          card={drawnCard}
+          player={player}
+          onApply={humanTurn ? () => dispatch({ type: 'APPLY_CARD' }) : undefined}
+        />
       )}
 
       {winner && (

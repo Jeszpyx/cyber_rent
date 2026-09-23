@@ -13,6 +13,8 @@ export function decideBotAction(state: GameState): Action | null {
       const cell = BOARD[player.position] as OwnableCell;
       return player.money - cell.price >= BOT_CASH_RESERVE ? { type: 'BUY' } : { type: 'SKIP_BUY' };
     }
+    case 'card':
+      return { type: 'APPLY_CARD' };
     case 'end':
       return { type: 'END_TURN' };
     case 'gameOver':
