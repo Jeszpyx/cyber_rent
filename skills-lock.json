@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "context7-cli": {
+      "source": "upstash/context7",
+      "sourceType": "github",
+      "skillPath": "skills/context7-cli/SKILL.md",
+      "computedHash": "5244306f18a412922be7718a35e265bbd65e6700424d21f048fdee48369ae9e9"
+    }
+  }
+}

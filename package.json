@@ -1,16 +1,32 @@
 {
   "name": "cyber-rent",
-  "version": "1.0.0",
-  "description": "Простое Express приложение",
-  "main": "server.js",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cyber Rent — экономическая настольная игра (сайт + Telegram Mini App)",
+  "main": "dist/server/index.js",
   "scripts": {
-    "start": "node server.js",
-    "build": "echo \"no build step\""
+    "dev": "vite",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json && vite build",
+    "start": "node dist/server/index.js",
+    "test": "vitest run"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.12.0"
   },
   "dependencies": {
-    "express": "^4.19.2"
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "express": "^5.2.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.1"
   }
 }

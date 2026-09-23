@@ -1,0 +1,93 @@
+import { useState } from 'react';
+import { BOARD } from '../../shared/game/board';
+import { currentPlayer, type NewGameOptions } from '../../shared/game/engine';
+import type { OwnableCell } from '../../shared/game/types';
+import { useGame } from '../hooks/useGame';
+import { Board } from './Board';
+import { BuildInfo } from './BuildInfo';
+import { CellCard } from './CellCard';
+import { Dice } from './Dice';
+import { PlayerPanel } from './PlayerPanel';
+
+interface Props {
+  options: NewGameOptions;
+  onRestart: () => void;
+}
+
+export function Game({ options, onRestart }: Props) {
+  const { state, dispatch } = useGame(options);
+  const [selectedCell, setSelectedCell] = useState<number | null>(null);
+
+  const player = currentPlayer(state);
+  const humanTurn = !player.isBot && state.phase !== 'gameOver';
+  const winner = state.players.find((p) => p.id === state.winnerId);
+  const buyCell = state.phase === 'buyDecision' ? (BOARD[player.position] as OwnableCell) : null;
+
+  return (
+    <div className="game">
+      <Board state={state} onCellClick={setSelectedCell}>
+        <div className="turn-label" style={{ color: player.color }}>
+          {state.phase === 'gameOver' ? 'Игра окончена' : `Ход: ${player.name}`}
+        </div>
+        <Dice dice={state.dice} />
+        <div className="actions">
+          {humanTurn && state.phase === 'roll' && (
+            <button className="btn primary" onClick={() => dispatch({ type: 'ROLL' })}>
+              Бросить кубики
+            </button>
+          )}
+          {humanTurn && buyCell && (
+            <>
+              <button className="btn primary" onClick={() => dispatch({ type: 'BUY' })}>
+                Купить за {buyCell.price}₵
+              </button>
+              <button className="btn" onClick={() => dispatch({ type: 'SKIP_BUY' })}>
+                Отказаться
+              </button>
+            </>
+          )}
+          {humanTurn && state.phase === 'end' && (
+            <button className="btn primary" onClick={() => dispatch({ type: 'END_TURN' })}>
+              Завершить ход
+            </button>
+          )}
+          {!humanTurn && state.phase !== 'gameOver' && <span className="thinking">бот думает…</span>}
+        </div>
+        {buyCell && humanTurn && <div className="buy-hint">«{buyCell.name}» свободен</div>}
+      </Board>
+
+      <aside className="side">
+        <PlayerPanel state={state} />
+        <ol className="log" reversed>
+          {state.log
+            .slice()
+            .reverse()
+            .map((entry) => (
+              <li key={entry.id}>{entry.text}</li>
+            ))}
+        </ol>
+        <div className="side-footer">
+          <button className="btn small" onClick={onRestart}>
+            Новая игра
+          </button>
+          <BuildInfo />
+        </div>
+      </aside>
+
+      {selectedCell !== null && (
+        <CellCard state={state} index={selectedCell} onClose={() => setSelectedCell(null)} />
+      )}
+
+      {winner && (
+        <div className="overlay">
+          <div className="modal">
+            <h2 style={{ color: winner.color }}>{winner.name} побеждает!</h2>
+            <button className="btn primary" onClick={onRestart}>
+              Новая игра
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
