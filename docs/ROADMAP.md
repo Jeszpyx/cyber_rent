@@ -13,10 +13,11 @@
 
 ## Принятые решения
 
-- **Стек:** Express 5 + TypeScript 7 (сервер), Vite 8 + React 19 (клиент), Vitest 5 (тесты движка). Нужен **Node ≥ 22.12** (требование Vite 8 / Vitest 5). Версия Node на хостинге показывается в `/api/health`.
+- **Стек:** Express 5 + TypeScript 6 (сервер), Vite 8 + React 19 (клиент), Vitest 5 (тесты движка). Нужен **Node ≥ 22.12** (требование Vite 8 / Vitest 5). На хостинге Node 22.20, версия показывается в `/api/health`.
+- **⚠ Не обновлять TypeScript до 7.x.** TS 7 — нативный Go-компилятор, запускается как `tsc.exe`, а MonsterASP запрещает запускать `.exe` при сборке (`spawnSync … tsc.exe UNKNOWN`). Нельзя и другие инструменты сборки, которые запускают нативные бинарники дочерним процессом.
 - **Документация:** перед использованием API библиотеки сверяться с актуальной документацией через Context7 (скилл `context7-cli`: `npx ctx7@latest library <name> <query>` → `npx ctx7@latest docs <id> <query>`). Версии мажорные и новые, не полагаться на память.
 - **Express 5:** catch-all маршрут пишется как `'/{*splat}'`, а не `'*'`.
-- **TypeScript 7:** удалены `moduleResolution: node/node10`, `baseUrl`, `target: es5`. Сервер собирается с `module: nodenext` (без `"type": "module"` в package.json → CommonJS).
+- **TypeScript:** `moduleResolution: node/node10`, `baseUrl`, `target: es5` устарели (удалены в TS 7), не использовать. Сервер собирается с `module: nodenext` (без `"type": "module"` в package.json → CommonJS).
 - **Игровая логика** — чистые функции в `src/shared/game/`, без React и Node API. На этапе 1 работает в браузере; позже тот же код переедет на сервер для мультиплеера.
 - **Один корневой `package.json`, без workspaces.** Панель MonsterASP запускает `npm install && npm run build` для выбранного `package.json` и публикует всё вместе с `node_modules`.
 - **Всё нужное для сборки лежит в `dependencies`, а не в `devDependencies`:** `typescript`, `vite`, `@vitejs/plugin-react` и `@types/*`. Неизвестно, ставит ли панель dev-зависимости (при `NODE_ENV=production` не поставит), а без них упадёт `npm run build`. В `devDependencies` — только `vitest`.
