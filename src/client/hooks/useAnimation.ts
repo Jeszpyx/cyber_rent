@@ -1,15 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BOARD } from '../../shared/game/board';
+import { DICE_MS, FAST_STEP_MS, JUMP_MS, LONG_MOVE_STEPS, STEP_MS } from '../../shared/game/timing';
 import type { GameState } from '../../shared/game/types';
 import { playCue, type Cue } from '../feedback';
-
-/** Сколько крутятся кубики, длительность шага фишки и паузы после переноса в Изолятор (ms). */
-const DICE_MS = 650;
-const STEP_MS = 150;
-const JUMP_MS = 450;
-/** Шаги длиннее этого проигрываются быстрее (перемещение карточкой через полполя). */
-const LONG_MOVE_STEPS = 12;
-const FAST_STEP_MS = 70;
 
 interface Frame {
   /** позиции фишек, которые показываются вместо state.position, пока идёт анимация */

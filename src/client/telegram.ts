@@ -27,7 +27,7 @@ interface TelegramWebApp {
   initData: string;
   version: string;
   platform: string;
-  initDataUnsafe: { user?: { first_name?: string; username?: string } };
+  initDataUnsafe: { user?: { first_name?: string; username?: string }; start_param?: string };
   MainButton: BottomButton;
   BackButton?: BackButton;
   HapticFeedback?: HapticFeedback;
@@ -35,6 +35,7 @@ interface TelegramWebApp {
   expand(): void;
   isVersionAtLeast(version: string): boolean;
   disableVerticalSwipes?(): void;
+  openTelegramLink(url: string): void;
   setHeaderColor?(color: string): void;
   setBackgroundColor?(color: string): void;
 }
@@ -72,6 +73,24 @@ export function isInTelegram(): boolean {
 
 export function telegramUserName(): string | null {
   return getWebApp()?.initDataUnsafe.user?.first_name ?? null;
+}
+
+/** Подписанная строка initData: сервер проверяет её HMAC с токеном бота (G4). */
+export function telegramInitData(): string | null {
+  return getWebApp()?.initData ?? null;
+}
+
+/** Параметр startapp из ссылки t.me/<bot>/<app>?startapp=<код> — код комнаты из приглашения (G5). */
+export function telegramStartParam(): string | null {
+  return getWebApp()?.initDataUnsafe.start_param ?? null;
+}
+
+/** Открывает ссылку t.me внутри Telegram, не закрывая Mini App; вне Telegram — false. */
+export function openTelegramLink(url: string): boolean {
+  const webApp = getWebApp();
+  if (!webApp) return false;
+  webApp.openTelegramLink(url);
+  return true;
 }
 
 /** Нижняя главная кнопка Telegram; вне Telegram — null. */

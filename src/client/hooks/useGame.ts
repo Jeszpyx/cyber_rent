@@ -2,25 +2,32 @@ import { useEffect, useReducer, useState } from 'react';
 import { decideBotAction } from '../../shared/game/bot';
 import { actingPlayer, applyAction, createGame, type NewGameOptions } from '../../shared/game/engine';
 import { MODES } from '../../shared/game/modes';
-import type { GameState } from '../../shared/game/types';
+import { botDelayMs } from '../../shared/game/timing';
+import type { Action, GameState } from '../../shared/game/types';
 import { saveGame } from '../gameStorage';
-import { useAnimation } from './useAnimation';
+import { useAnimation, type AnimationView } from './useAnimation';
 import { useGameSounds } from './useGameSounds';
-
-const BOT_DELAY_MS = 650;
-/** Карточку бота держим дольше, чтобы человек успел прочитать. */
-const BOT_CARD_DELAY_MS = 2000;
 
 /** Новая партия или продолжение сохранённой. */
 export type GameInit = { options: NewGameOptions } | { state: GameState };
+
+/** Всё, что нужно экрану партии, — одинаково для игры с ботами и онлайн-комнаты. */
+export interface GameSession {
+  state: GameState;
+  dispatch: (action: Action) => void;
+  /** когда у живого игрока выйдет время на решение (ms, часы этого устройства); null — таймер не идёт */
+  deadline: number | null;
+  animation: AnimationView;
+  /** id фишки, которой управляет этот экран; null — зритель */
+  localId: string | null;
+}
 
 function init(source: GameInit): GameState {
   return 'state' in source ? source.state : createGame(source.options);
 }
 
-export function useGame(source: GameInit) {
+export function useGame(source: GameInit): GameSession {
   const [state, dispatch] = useReducer(applyAction, source, init);
-  /** Когда у живого игрока выйдет время на решение (ms); null — таймер не идёт. */
   const [deadline, setDeadline] = useState<number | null>(null);
   // Человек всегда первый игрок (createGame); после таймаутов им может управлять бот.
   const humanId = state.players[0].id;
@@ -40,8 +47,7 @@ export function useGame(source: GameInit) {
       setDeadline(null);
       const action = decideBotAction(state);
       if (!action) return;
-      const delay = state.phase === 'card' ? BOT_CARD_DELAY_MS : BOT_DELAY_MS;
-      const timer = setTimeout(() => dispatch(action), delay);
+      const timer = setTimeout(() => dispatch(action), botDelayMs(state));
       return () => clearTimeout(timer);
     }
     // Любое действие человека меняет состояние и перезапускает отсчёт.
@@ -55,5 +61,5 @@ export function useGame(source: GameInit) {
     return () => clearTimeout(timer);
   }, [state, animation.busy]);
 
-  return { state, dispatch, deadline, animation };
+  return { state, dispatch, deadline, animation, localId: humanId };
 }

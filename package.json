@@ -6,6 +6,7 @@
   "main": "dist/server/index.js",
   "scripts": {
     "dev": "vite",
+    "dev:server": "tsc -p tsconfig.server.json && node dist/server/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json && vite build",
     "start": "node dist/server/index.js",
@@ -18,10 +19,12 @@
   "dependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^22.19.0",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "express": "^5.2.1",
+    "pg": "^8.23.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "typescript": "^6.0.3",

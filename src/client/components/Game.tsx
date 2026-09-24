@@ -5,7 +5,7 @@ import { canBuild, gameMode, ownedCells, rentMultiplier } from '../../shared/gam
 import { actingPlayer, currentPlayer } from '../../shared/game/engine';
 import type { Action, GameState, OwnableCell, Player } from '../../shared/game/types';
 import { setSoundEnabled, soundEnabled, subscribeSound } from '../feedback';
-import { useGame, type GameInit } from '../hooks/useGame';
+import { useGame, type GameInit, type GameSession } from '../hooks/useGame';
 import { useBackButton, useMainButton, type MainButtonConfig } from '../hooks/useTelegramButtons';
 import { AuctionModal } from './AuctionModal';
 import { Board } from './Board';
@@ -49,8 +49,25 @@ interface Props {
   onExit: () => void;
 }
 
+/** Партия против ботов на этом устройстве. */
 export function Game({ init, onExit }: Props) {
-  const { state, dispatch, deadline, animation } = useGame(init);
+  return <GameScreen session={useGame(init)} onExit={onExit} exitTitle="Партия сохранится — её можно продолжить из меню" />;
+}
+
+interface ScreenProps {
+  session: GameSession;
+  onExit: () => void;
+  /** подсказка к кнопке «В меню» */
+  exitTitle: string;
+  /** онлайн-комната: код показывается в строке статуса, своя фишка помечается в списке игроков */
+  roomCode?: string;
+  /** короткое сообщение поверх экрана: отклонённое действие, потеря связи */
+  notice?: string | null;
+}
+
+/** Экран партии: одинаковый для игры с ботами и онлайн-комнаты, отличается только сессия. */
+export function GameScreen({ session, onExit, exitTitle, roomCode, notice }: ScreenProps) {
+  const { state, dispatch, deadline, animation, localId } = session;
   const [selectedCell, setSelectedCell] = useState<number | null>(null);
   const [tradeOpen, setTradeOpen] = useState(false);
   const [summaryClosed, setSummaryClosed] = useState(false);
@@ -59,8 +76,12 @@ export function Game({ init, onExit }: Props) {
   const player = currentPlayer(state);
   // Решает должник в фазе 'debt', иначе — тот, чей ход.
   const actor = actingPlayer(state);
-  // Пока фишка идёт, решения человеку не показываем: сначала пусть дойдёт.
-  const humanTurn = !actor.isBot && state.phase !== 'gameOver' && !animation.busy;
+  // Решения показываем только тому, чья фишка решает, и только когда она дошла.
+  const humanTurn = actor.id === localId && !actor.isBot && state.phase !== 'gameOver' && !animation.busy;
+  const waiting = actor.id !== localId || actor.isBot;
+  const me = state.players.find((p) => p.id === localId);
+  // После таймаутов фишкой управляет бот — игрок может вернуть управление.
+  const takenOver = me && me.isBot && !me.bankrupt && state.phase !== 'gameOver';
   const debt = state.phase === 'debt' ? state.debt : null;
   const creditor = debt?.to ? state.players.find((p) => p.id === debt.to) : null;
   const canDevelop = humanTurn && ownedCells(state, actor.id).some((i) => canBuild(state, i));
@@ -107,6 +128,7 @@ export function Game({ init, onExit }: Props) {
           </span>
           <span title="Копилка Нейтральной зоны: налоги и штрафы, забирает попавший на клетку">☯ {state.pot}₵</span>
           {multiplier > 1 && <span className="inflation">рента ×{multiplier}</span>}
+          {roomCode && <span title="Код онлайн-комнаты">⌘ {roomCode}</span>}
           {humanTurn && deadline !== null && <TurnTimer key={deadline} deadline={deadline} />}
         </div>
         <Dice dice={state.dice} rolling={animation.rolling} />
@@ -169,7 +191,14 @@ export function Game({ init, onExit }: Props) {
               ⇄ Обмен
             </button>
           )}
-          {actor.isBot && state.phase !== 'gameOver' && !animation.busy && <span className="thinking">бот думает…</span>}
+          {waiting && state.phase !== 'gameOver' && !animation.busy && (
+            <span className="thinking">{actor.isBot ? 'бот думает…' : `решает ${actor.name}…`}</span>
+          )}
+          {takenOver && (
+            <button className="btn" onClick={() => dispatch({ type: 'TAKE_CONTROL', playerId: me.id })}>
+              Вернуть управление
+            </button>
+          )}
           {finished && summaryClosed && (
             <button className="btn primary" onClick={() => setSummaryClosed(false)}>
               Итоги партии
@@ -187,13 +216,14 @@ export function Game({ init, onExit }: Props) {
           </div>
         )}
         {canDevelop && <div className="buy-hint">Квартал ваш целиком — нажмите на район, чтобы строить.</div>}
+        {takenOver && <div className="buy-hint">Вы долго молчали, и за вас играет бот.</div>}
       </Board>
 
       <aside className="side">
-        <PlayerPanel state={state} />
+        <PlayerPanel state={state} you={roomCode ? localId : null} />
         <LogPanel state={state} />
         <div className="side-footer">
-          <button className="btn small" onClick={onExit} title="Партия сохранится — её можно продолжить из меню">
+          <button className="btn small" onClick={onExit} title={exitTitle}>
             В меню
           </button>
           <button
@@ -257,6 +287,12 @@ export function Game({ init, onExit }: Props) {
       )}
 
       {showSummary && <GameSummary state={state} onNewGame={onExit} onClose={() => setSummaryClosed(true)} />}
+
+      {notice && (
+        <div className="toast" role="status">
+          {notice}
+        </div>
+      )}
     </div>
   );
 }

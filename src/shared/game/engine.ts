@@ -57,39 +57,33 @@ const LOG_LIMIT = 150;
 const MOVE_LIMIT = 8;
 const PLAYER_COLORS = ['#3ee6ff', '#ff2e9a', '#ffe14d', '#2eff8c'];
 const BOT_NAMES = ['Бот Глитч', 'Бот Неон', 'Бот Хэш'];
+/** Больше игроков за столом не помещается: у каждого свой цвет фишки. */
+export const MAX_PLAYERS = PLAYER_COLORS.length;
 
 export interface NewGameOptions {
   playerName: string;
+  /** онлайн: имена всех живых игроков по порядку хода; без него живой игрок один — playerName */
+  humanNames?: string[];
   bots: number;
   seed?: number;
   mode?: GameModeId;
-  /** ежедневный бонус (dailyBonus.ts) — прибавляется к стартовым деньгам человека */
+  /** ежедневный бонус (dailyBonus.ts) — прибавляется к стартовым деньгам первого живого игрока */
   startBonus?: number;
+}
+
+function newPlayer(index: number, name: string, isBot: boolean, money: number): Player {
+  return { id: `p${index}`, name, isBot, color: PLAYER_COLORS[index], money, position: 0, bankrupt: false, releaseCards: [], isolation: null, idleStrikes: 0 };
 }
 
 function emptyStats(money: number): PlayerStats {
   return { rentPaid: 0, rentReceived: 0, cellsBought: 0, auctionsWon: 0, trades: 0, built: 0, potCollected: 0, peakWorth: money, out: null };
 }
 
-export function createGame({ playerName, bots, seed, mode = DEFAULT_MODE, startBonus = 0 }: NewGameOptions): GameState {
+export function createGame({ playerName, humanNames, bots, seed, mode = DEFAULT_MODE, startBonus = 0 }: NewGameOptions): GameState {
   const { startMoney } = MODES[mode];
-  const players: Player[] = [
-    { id: 'p0', name: playerName, isBot: false, color: PLAYER_COLORS[0], money: startMoney + startBonus, position: 0, bankrupt: false, releaseCards: [], isolation: null, idleStrikes: 0 },
-  ];
-  for (let i = 0; i < bots; i++) {
-    players.push({
-      id: `p${i + 1}`,
-      name: BOT_NAMES[i],
-      isBot: true,
-      color: PLAYER_COLORS[i + 1],
-      money: startMoney,
-      position: 0,
-      bankrupt: false,
-      releaseCards: [],
-      isolation: null,
-      idleStrikes: 0,
-    });
-  }
+  const humans = humanNames ?? [playerName];
+  const players = humans.map((name, i) => newPlayer(i, name, false, startMoney + (i === 0 ? startBonus : 0)));
+  for (let i = 0; i < bots; i++) players.push(newPlayer(players.length, BOT_NAMES[i], true, startMoney));
   const [hack, s1] = shuffle(deckCardIds('hack'), seed ?? Math.floor(Math.random() * 2 ** 31));
   const [net, s2] = shuffle(deckCardIds('net'), s1);
   const state: GameState = {
@@ -130,6 +124,7 @@ export function currentPlayer(state: GameState): Player {
 
 export function applyAction(prev: GameState, action: Action): GameState {
   if (action.type === 'TIMEOUT') return trackPeaks(timeout(prev));
+  if (action.type === 'TAKE_CONTROL') return takeControl(prev, action.playerId);
   const next = reduce(prev, action);
   if (next === prev) return prev;
   // Любое своё действие обнуляет счётчик таймаутов того, кто принимал решение.
@@ -166,6 +161,21 @@ function timeout(prev: GameState): GameState {
   }
   const fallback = decideBotAction(state);
   return fallback ? reduce(state, fallback) : state;
+}
+
+/**
+ * Живой игрок возвращает себе управление после таймаутов. Кому это можно (не настоящим ботам
+ * и только за свою фишку), решает вызывающий: UI или комната на сервере.
+ */
+function takeControl(prev: GameState, playerId: string): GameState {
+  const target = prev.players.find((p) => p.id === playerId);
+  if (prev.phase === 'gameOver' || !target || !target.isBot || target.bankrupt) return prev;
+  const state = structuredClone(prev);
+  const player = playerById(state, playerId);
+  player.isBot = false;
+  player.idleStrikes = 0;
+  log(state, `${player.name} возвращается и снова управляет своей фишкой.`, 'system', player);
+  return state;
 }
 
 function reduce(prev: GameState, action: Action): GameState {
@@ -358,7 +368,8 @@ function reduce(prev: GameState, action: Action): GameState {
       return state;
     }
     case 'TIMEOUT':
-      // Обрабатывается в applyAction; бот этот Action не выбирает.
+    case 'TAKE_CONTROL':
+      // Обрабатываются в applyAction; бот эти Action не выбирает.
       return prev;
   }
 }

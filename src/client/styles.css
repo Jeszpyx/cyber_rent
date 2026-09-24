@@ -1190,3 +1190,132 @@ button {
     gap: 12px;
   }
 }
+
+/* ---------- online (G3) ---------- */
+
+.online-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 420px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgb(27 18 51 / 60%);
+}
+
+.online-menu h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--accent-2);
+}
+
+.online-menu small {
+  font-size: 0.8rem;
+}
+
+.text-input {
+  width: 100%;
+  max-width: 260px;
+  min-width: 0;
+  padding: 0.55em 0.8em;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-2);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+}
+
+.text-input:focus {
+  outline: none;
+  border-color: var(--accent-2);
+  box-shadow: 0 0 8px rgb(62 230 255 / 40%);
+}
+
+.join-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.code-input {
+  width: 8.5em;
+  flex: 0 1 auto;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.error {
+  color: #ff6b8a;
+}
+
+.lobby-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.room-code {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: clamp(2rem, 11vw, 3rem);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--accent-2);
+  text-shadow: 0 0 14px var(--accent-2);
+  user-select: all;
+}
+
+.lobby-members {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  max-width: 420px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lobby-members li {
+  overflow: hidden;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lobby-members li.free {
+  border-style: dashed;
+  background: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.player-name .you {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + var(--safe-bottom));
+  z-index: 50;
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 0 14px rgb(255 46 154 / 35%);
+  font-size: 0.9rem;
+  text-align: center;
+  transform: translateX(-50%);
+}

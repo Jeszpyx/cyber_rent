@@ -249,4 +249,6 @@ export type Action =
   | { type: 'REJECT_TRADE' }
   | { type: 'END_TURN' }
   /** время на решение вышло: штраф actingPlayer в копилку, затем за него действует бот */
-  | { type: 'TIMEOUT' };
+  | { type: 'TIMEOUT' }
+  /** живой игрок, которого после таймаутов перехватил бот, возвращает управление (в любой фазе) */
+  | { type: 'TAKE_CONTROL'; playerId: string };

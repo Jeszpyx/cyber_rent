@@ -1,6 +1,7 @@
 import type { GameState } from '../../shared/game/types';
 
-export function PlayerPanel({ state }: { state: GameState }) {
+/** you — своя фишка в онлайн-партии, помечается «(вы)»; в игре с ботами не нужна. */
+export function PlayerPanel({ state, you = null }: { state: GameState; you?: string | null }) {
   return (
     <ul className="players">
       {state.players.map((p, i) => {
@@ -11,7 +12,10 @@ export function PlayerPanel({ state }: { state: GameState }) {
         return (
           <li key={p.id} className={classes.join(' ')} style={{ borderColor: p.color }}>
             <span className={p.isolation ? 'token big isolated' : 'token big'} style={{ background: p.color }} />
-            <span className="player-name">{p.name}</span>
+            <span className="player-name">
+              {p.name}
+              {p.id === you && <small className="you"> (вы)</small>}
+            </span>
             <span className="player-owned">
               🏢 {owned}
               {p.isolation && <span title={`В Изоляторе, попыток: ${p.isolation.turnsLeft}`}> ⛓{p.isolation.turnsLeft}</span>}
