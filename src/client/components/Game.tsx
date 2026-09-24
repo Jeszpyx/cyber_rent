@@ -5,12 +5,15 @@ import { canBuild, gameMode, ownedCells, rentMultiplier } from '../../shared/gam
 import { actingPlayer, currentPlayer, standings, type NewGameOptions } from '../../shared/game/engine';
 import type { OwnableCell } from '../../shared/game/types';
 import { useGame } from '../hooks/useGame';
+import { AuctionModal } from './AuctionModal';
 import { Board } from './Board';
 import { BuildInfo } from './BuildInfo';
 import { CellCard } from './CellCard';
 import { Dice } from './Dice';
 import { DrawnCard } from './DrawnCard';
 import { PlayerPanel } from './PlayerPanel';
+import { TradeDialog } from './TradeDialog';
+import { TradeProposal } from './TradeProposal';
 import { TurnTimer } from './TurnTimer';
 
 interface Props {
@@ -21,6 +24,7 @@ interface Props {
 export function Game({ options, onRestart }: Props) {
   const { state, dispatch, deadline } = useGame(options);
   const [selectedCell, setSelectedCell] = useState<number | null>(null);
+  const [tradeOpen, setTradeOpen] = useState(false);
 
   const player = currentPlayer(state);
   // Решает должник в фазе 'debt', иначе — тот, чей ход.
@@ -29,6 +33,8 @@ export function Game({ options, onRestart }: Props) {
   const debt = state.phase === 'debt' ? state.debt : null;
   const creditor = debt?.to ? state.players.find((p) => p.id === debt.to) : null;
   const canDevelop = humanTurn && ownedCells(state, actor.id).some((i) => canBuild(state, i));
+  // Обмен предлагают в свой ход там же, где строят: до броска, в Изоляторе и в конце хода.
+  const canTrade = humanTurn && (state.phase === 'roll' || state.phase === 'isolation' || state.phase === 'end');
   const winner = state.players.find((p) => p.id === state.winnerId);
   const buyCell = state.phase === 'buyDecision' ? (BOARD[player.position] as OwnableCell) : null;
   const mode = gameMode(state);
@@ -84,8 +90,8 @@ export function Game({ options, onRestart }: Props) {
               <button className="btn primary" onClick={() => dispatch({ type: 'BUY' })}>
                 Купить за {buyCell.price}₵
               </button>
-              <button className="btn" onClick={() => dispatch({ type: 'SKIP_BUY' })}>
-                Отказаться
+              <button className="btn" onClick={() => dispatch({ type: 'START_AUCTION' })}>
+                На торги
               </button>
             </>
           )}
@@ -108,9 +114,14 @@ export function Game({ options, onRestart }: Props) {
               </button>
             </>
           )}
+          {canTrade && (
+            <button className="btn" onClick={() => setTradeOpen(true)}>
+              ⇄ Обмен
+            </button>
+          )}
           {!humanTurn && state.phase !== 'gameOver' && <span className="thinking">бот думает…</span>}
         </div>
-        {buyCell && humanTurn && <div className="buy-hint">«{buyCell.name}» свободен</div>}
+        {buyCell && humanTurn && <div className="buy-hint">«{buyCell.name}» свободен. Откажетесь — клетка уйдёт на торги.</div>}
         {state.phase === 'isolation' && humanTurn && (
           <div className="buy-hint">Изолятор: дубль — свобода, после {ISOLATION_ATTEMPTS}-й неудачи — залог.</div>
         )}
@@ -148,6 +159,36 @@ export function Game({ options, onRestart }: Props) {
           managerId={humanTurn ? actor.id : null}
           dispatch={dispatch}
           onClose={() => setSelectedCell(null)}
+        />
+      )}
+
+      {state.auction && (
+        <AuctionModal
+          state={state}
+          auction={state.auction}
+          dispatch={humanTurn ? dispatch : undefined}
+          deadline={humanTurn ? deadline : null}
+        />
+      )}
+
+      {state.trade && (
+        <TradeProposal
+          state={state}
+          trade={state.trade}
+          dispatch={humanTurn ? dispatch : undefined}
+          deadline={humanTurn ? deadline : null}
+        />
+      )}
+
+      {tradeOpen && canTrade && (
+        <TradeDialog
+          state={state}
+          player={actor}
+          onPropose={(trade) => {
+            dispatch({ type: 'PROPOSE_TRADE', trade });
+            setTradeOpen(false);
+          }}
+          onClose={() => setTradeOpen(false)}
         />
       )}
 

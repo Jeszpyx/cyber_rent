@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { BAIL, ISOLATION_ATTEMPTS, ISOLATION_INDEX, START_MONEY } from './board';
 import { decideBotAction } from './bot';
 import { applyAction, createGame, resolveRoll } from './engine';
-import type { GameState } from './types';
+import type { Action, GameState } from './types';
+
+const act = (state: GameState, ...actions: Action[]) => actions.reduce(applyAction, state);
 
 function newGame(bots = 1): GameState {
   return createGame({ playerName: 'Тест', bots, seed: 42 });
@@ -46,7 +48,7 @@ describe('three doubles', () => {
     resolveRoll(state, [3, 3]);
     resolveRoll(state, [1, 2]); // 13, свободный район
     expect(state.players[0].isolation).toBeNull();
-    const after = applyAction(applyAction(state, { type: 'SKIP_BUY' }), { type: 'END_TURN' });
+    const after = act(state, { type: 'START_AUCTION' }, { type: 'PASS' }, { type: 'PASS' }, { type: 'END_TURN' });
     expect(after.doublesInRow).toBe(0);
     expect(after.phase).toBe('roll');
   });
@@ -78,7 +80,7 @@ describe('turn in Isolation', () => {
     expect(state.players[0].isolation).toBeNull();
     expect(state.players[0].position).toBe(14);
     expect(state.phase).toBe('buyDecision');
-    expect(applyAction(state, { type: 'SKIP_BUY' }).phase).toBe('end');
+    expect(act(state, { type: 'START_AUCTION' }, { type: 'PASS' }, { type: 'PASS' }).phase).toBe('end');
   });
 
   it('a miss spends an attempt and keeps the player in place', () => {

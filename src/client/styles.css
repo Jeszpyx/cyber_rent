@@ -706,3 +706,163 @@ button {
   gap: 8px;
   padding: 0 16px;
 }
+
+/* ---------- auction & trade ---------- */
+
+.muted {
+  color: var(--muted);
+}
+
+.auction,
+.trade-modal {
+  max-height: calc(100dvh - 32px);
+  overflow: hidden auto;
+}
+
+.auction {
+  padding: 0 0 16px;
+  border-width: 2px;
+}
+
+.auction .actions,
+.auction-bid,
+.auction-queue,
+.auction-hint {
+  padding: 0 16px;
+}
+
+.auction-bid {
+  margin: 0;
+}
+
+.auction-bid b {
+  color: var(--accent-2);
+}
+
+.auction-queue {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.auction-queue li {
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  opacity: 0.7;
+}
+
+.auction-queue li.turn {
+  opacity: 1;
+  box-shadow: 0 0 8px rgb(62 230 255 / 45%);
+}
+
+.auction-queue li.leader::before {
+  content: '★ ';
+  color: var(--accent-2);
+}
+
+.auction-queue small,
+.auction-hint {
+  color: var(--muted);
+}
+
+.chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.trade-parties {
+  margin: 0;
+}
+
+.trade-side {
+  align-self: stretch;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  text-align: left;
+}
+
+.trade-side > small,
+.trade-side legend {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.trade-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.trade-item input {
+  flex: none;
+  margin: 0;
+}
+
+.trade-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.offer-dot {
+  flex: none;
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
+}
+
+.trade-item .offer-dot {
+  margin-right: 0;
+}
+
+.offer-list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.offer-list li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 2px 0;
+}
+
+.trade-money {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.trade-money input {
+  width: 7em;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-2);
+  color: var(--text);
+  font: inherit;
+}
+
+.trade-money small {
+  color: var(--muted);
+}

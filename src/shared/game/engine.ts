@@ -16,22 +16,27 @@ import {
   buildCost,
   buildingLevel,
   buildingSellValue,
+  canBid,
   canBuild,
   canMortgage,
+  canProposeTrade,
   canSellBuilding,
   canUnmortgage,
   gameMode,
   hasMonopoly,
   liquidationValue,
+  minBid,
   mortgageValue,
   netWorth,
   rentMultiplier,
   sellBuildingResult,
+  tradeAssetsValid,
+  tradeKey,
   unmortgageCost,
 } from './economy';
 import { DEFAULT_MODE, MODES, type GameModeId } from './modes';
 import { rollDie, shuffle } from './rng';
-import type { Action, Card, CardDeck, Debt, GameState, OwnableCell, Payment, Player } from './types';
+import type { Action, Card, CardDeck, Debt, GameState, OwnableCell, Payment, Player, TradeOffer } from './types';
 
 export { actingPlayer } from './economy';
 
@@ -83,6 +88,9 @@ export function createGame({ playerName, bots, seed, mode = DEFAULT_MODE, startB
     mortgaged: {},
     pot: 0,
     debt: null,
+    auction: null,
+    trade: null,
+    tradeRounds: {},
     decks: { hack, net },
     pendingCard: null,
     seed: s2,
@@ -152,12 +160,67 @@ function reduce(prev: GameState, action: Action): GameState {
       finishMove(state);
       return state;
     }
-    case 'SKIP_BUY': {
+    case 'START_AUCTION': {
       if (prev.phase !== 'buyDecision') return prev;
       const state = structuredClone(prev);
       const player = currentPlayer(state);
-      log(state, `${player.name} отказывается от покупки «${BOARD[player.position].name}».`);
-      finishMove(state);
+      log(state, `${player.name} отказывается от покупки «${BOARD[player.position].name}» — клетка уходит на торги.`);
+      startAuction(state);
+      return state;
+    }
+    case 'BID': {
+      if (!canBid(prev, action.amount)) return prev;
+      const state = structuredClone(prev);
+      const auction = state.auction!;
+      const bidder = actingPlayer(state);
+      auction.bid = action.amount;
+      auction.leaderId = bidder.id;
+      auction.queue.push(auction.queue.shift()!);
+      log(state, `${bidder.name} ставит ${action.amount}₵.`);
+      advanceAuction(state);
+      return state;
+    }
+    case 'PASS': {
+      if (prev.phase !== 'auction' || !prev.auction) return prev;
+      const state = structuredClone(prev);
+      const player = actingPlayer(state);
+      state.auction!.queue.shift();
+      log(state, `${player.name} пасует и выходит из торгов.`);
+      advanceAuction(state);
+      return state;
+    }
+    case 'PROPOSE_TRADE': {
+      if (!canProposeTrade(prev, action.trade)) return prev;
+      const state = structuredClone(prev);
+      const trade = structuredClone(action.trade);
+      state.tradeRounds[tradeKey(trade.from, trade.to)] = state.round;
+      state.trade = { ...trade, resume: state.phase };
+      state.phase = 'trade';
+      const from = playerById(state, trade.from);
+      const to = playerById(state, trade.to);
+      log(state, `${from.name} предлагает обмен игроку ${to.name}: отдаёт ${offerText(trade.give)}, просит ${offerText(trade.take)}.`);
+      return state;
+    }
+    case 'ACCEPT_TRADE': {
+      if (prev.phase !== 'trade' || !prev.trade || !tradeAssetsValid(prev, prev.trade)) return prev;
+      const state = structuredClone(prev);
+      const trade = state.trade!;
+      const from = playerById(state, trade.from);
+      const to = playerById(state, trade.to);
+      handOver(state, from, to, trade.give);
+      handOver(state, to, from, trade.take);
+      state.trade = null;
+      state.phase = trade.resume;
+      log(state, `${to.name} принимает обмен с игроком ${from.name}.`);
+      return state;
+    }
+    case 'REJECT_TRADE': {
+      if (prev.phase !== 'trade' || !prev.trade) return prev;
+      const state = structuredClone(prev);
+      const trade = state.trade!;
+      state.trade = null;
+      state.phase = trade.resume;
+      log(state, `${playerById(state, trade.to).name} отклоняет обмен с игроком ${playerById(state, trade.from).name}.`);
       return state;
     }
     case 'APPLY_CARD': {
@@ -331,7 +394,9 @@ function landOn(state: GameState): void {
         state.phase = 'buyDecision';
         return;
       }
-      log(state, `У ${player.name} не хватает денег на покупку.`);
+      log(state, `У ${player.name} не хватает денег на покупку — «${cell.name}» уходит на торги.`);
+      startAuction(state);
+      return;
     } else if (ownerId !== player.id && state.mortgaged[cell.index]) {
       log(state, `«${cell.name}» в залоге — рента не берётся.`);
     } else if (ownerId !== player.id) {
@@ -355,6 +420,65 @@ function landOn(state: GameState): void {
   }
 
   finishMove(state);
+}
+
+/**
+ * Торги за клетку под текущим игроком. Участвуют все живые: первым решает следующий по ходу,
+ * отказавшийся от покупки — последним.
+ */
+function startAuction(state: GameState): void {
+  const current = state.currentPlayer;
+  const queue: string[] = [];
+  for (let i = 1; i <= state.players.length; i++) {
+    const player = state.players[(current + i) % state.players.length];
+    if (!player.bankrupt) queue.push(player.id);
+  }
+  state.auction = { index: currentPlayer(state).position, bid: 0, leaderId: null, queue };
+  state.phase = 'auction';
+  advanceAuction(state);
+}
+
+/**
+ * Выводит из торгов тех, кому не хватает наличных на минимальную ставку, и подводит итог:
+ * остался один лидер — клетка его, не осталось никого — клетка остаётся у банка.
+ */
+function advanceAuction(state: GameState): void {
+  const auction = state.auction!;
+  while (auction.queue.length > 0 && auction.queue[0] !== auction.leaderId) {
+    const player = playerById(state, auction.queue[0]);
+    if (player.money >= minBid(auction)) break;
+    auction.queue.shift();
+    log(state, `${player.name} выбывает из торгов: не хватает наличных.`);
+  }
+  const cell = BOARD[auction.index];
+  if (auction.queue.length === 0) {
+    state.auction = null;
+    log(state, `Никто не сделал ставку — «${cell.name}» остаётся у банка.`);
+    finishMove(state);
+  } else if (auction.queue.length === 1 && auction.queue[0] === auction.leaderId) {
+    const winner = playerById(state, auction.leaderId);
+    winner.money -= auction.bid;
+    state.owners[auction.index] = winner.id;
+    state.auction = null;
+    log(state, `${winner.name} выигрывает торги и получает «${cell.name}» за ${auction.bid}₵.`);
+    finishMove(state);
+  }
+}
+
+function offerText(offer: TradeOffer): string {
+  const parts = offer.cells.map((i) => `«${BOARD[i].name}»`);
+  if (offer.money > 0) parts.push(`${offer.money}₵`);
+  if (offer.releaseCards.length > 0) parts.push(`карточки освобождения: ${offer.releaseCards.length}`);
+  return parts.length > 0 ? parts.join(', ') : 'ничего';
+}
+
+/** Передача по обмену: клетки уходят вместе с залогом, деньги и карточки — как есть. */
+function handOver(state: GameState, from: Player, to: Player, offer: TradeOffer): void {
+  for (const index of offer.cells) state.owners[index] = to.id;
+  from.money -= offer.money;
+  to.money += offer.money;
+  from.releaseCards = from.releaseCards.filter((id) => !offer.releaseCards.includes(id));
+  to.releaseCards.push(...offer.releaseCards);
 }
 
 function collectPot(state: GameState, player: Player): void {

@@ -75,8 +75,19 @@ export interface Player {
  * 'isolation' — начало хода в Изоляторе: ROLL (на дубль), PAY_BAIL или USE_RELEASE_CARD.
  * 'debt' — должнику (state.debt, не обязательно текущему игроку) не хватает наличных:
  * SELL_BUILDING / MORTGAGE, затем PAY_DEBT или DECLARE_BANKRUPTCY.
+ * 'auction' — торги за клетку (state.auction): участник, чья очередь, делает BID или PASS.
+ * 'trade' — адресат обмена (state.trade.to) отвечает ACCEPT_TRADE или REJECT_TRADE.
  */
-export type Phase = 'roll' | 'isolation' | 'buyDecision' | 'card' | 'debt' | 'end' | 'gameOver';
+export type Phase =
+  | 'roll'
+  | 'isolation'
+  | 'buyDecision'
+  | 'auction'
+  | 'card'
+  | 'debt'
+  | 'trade'
+  | 'end'
+  | 'gameOver';
 
 /** Обязательный платёж; to === null — банку */
 export interface Payment {
@@ -90,6 +101,37 @@ export interface Debt extends Payment {
   queue: Payment[];
   /** чем продолжить ход после расчёта: 'finish' — finishMove, 'move' — выход из Изолятора и ход на сумму кубиков */
   then: 'finish' | 'move';
+}
+
+/** Торги за свободную клетку: открытые ставки по кругу, PASS выводит из торгов насовсем. */
+export interface Auction {
+  index: number;
+  /** текущая старшая ставка; 0 — ставок ещё не было */
+  bid: number;
+  /** чья ставка старшая */
+  leaderId: string | null;
+  /** оставшиеся участники по очереди; первый — тот, кто сейчас решает */
+  queue: string[];
+}
+
+/** Что одна сторона обмена отдаёт другой. */
+export interface TradeOffer {
+  cells: number[];
+  money: number;
+  releaseCards: string[];
+}
+
+/** Предложение обмена: from отдаёт give и получает take от to. */
+export interface Trade {
+  from: string;
+  to: string;
+  give: TradeOffer;
+  take: TradeOffer;
+}
+
+/** Предложение ждёт ответа адресата; resume — фаза хода, в которую игра вернётся после ответа. */
+export interface PendingTrade extends Trade {
+  resume: Phase;
 }
 
 export interface LogEntry {
@@ -119,6 +161,12 @@ export interface GameState {
   pot: number;
   /** неоплаченный платёж в фазе 'debt' */
   debt: Debt | null;
+  /** идущие торги в фазе 'auction' */
+  auction: Auction | null;
+  /** предложение обмена в фазе 'trade' */
+  trade: PendingTrade | null;
+  /** `${from}>${to}` → круг последнего предложения обмена: одному адресату — не чаще раза за круг (за ход) */
+  tradeRounds: Record<string, number>;
   /** id карточек, верх колоды — первый элемент */
   decks: Record<CardDeck, string[]>;
   /** вытянутая карточка, ждёт APPLY_CARD */
@@ -132,7 +180,10 @@ export interface GameState {
 export type Action =
   | { type: 'ROLL' }
   | { type: 'BUY' }
-  | { type: 'SKIP_BUY' }
+  /** отказ от покупки: клетка уходит на торги */
+  | { type: 'START_AUCTION' }
+  | { type: 'BID'; amount: number }
+  | { type: 'PASS' }
   | { type: 'APPLY_CARD' }
   | { type: 'PAY_BAIL' }
   | { type: 'USE_RELEASE_CARD' }
@@ -142,6 +193,10 @@ export type Action =
   | { type: 'UNMORTGAGE'; index: number }
   | { type: 'PAY_DEBT' }
   | { type: 'DECLARE_BANKRUPTCY' }
+  /** from — всегда actingPlayer; поле нужно, чтобы предложение было самодостаточным */
+  | { type: 'PROPOSE_TRADE'; trade: Trade }
+  | { type: 'ACCEPT_TRADE' }
+  | { type: 'REJECT_TRADE' }
   | { type: 'END_TURN' }
   /** время на решение вышло: штраф actingPlayer в копилку, затем за него действует бот */
   | { type: 'TIMEOUT' };

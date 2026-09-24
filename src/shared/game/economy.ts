@@ -1,4 +1,5 @@
 import {
+  AUCTION_STEP,
   BANK_MODULES,
   BANK_TOWERS,
   BOARD,
@@ -10,7 +11,7 @@ import {
   isOwnable,
 } from './board';
 import { MODES, type GameMode } from './modes';
-import type { DistrictGroup, GameState, OwnableCell, Phase, Player } from './types';
+import type { Auction, DistrictGroup, GameState, OwnableCell, Phase, Player, Trade, TradeOffer } from './types';
 
 export function gameMode(state: GameState): GameMode {
   return MODES[state.mode];
@@ -41,10 +42,67 @@ export function netWorth(state: GameState, player: Player): number {
 /** Фазы своего хода, в которых можно строить, продавать, закладывать и выкупать. */
 const MANAGE_PHASES: Phase[] = ['roll', 'isolation', 'end'];
 
-/** Кто сейчас принимает решение: должник в фазе 'debt', иначе текущий игрок. */
+/**
+ * Кто сейчас принимает решение: должник в фазе 'debt', участник торгов, чья очередь,
+ * адресат обмена в фазе 'trade', иначе текущий игрок.
+ */
 export function actingPlayer(state: GameState): Player {
-  if (state.debt) return state.players.find((p) => p.id === state.debt!.from)!;
+  const id = state.debt?.from ?? state.auction?.queue[0] ?? state.trade?.to;
+  if (id !== undefined) return state.players.find((p) => p.id === id)!;
   return state.players[state.currentPlayer];
+}
+
+/** Минимальная допустимая ставка на торгах: первая — AUCTION_STEP, дальше — старшая + AUCTION_STEP. */
+export function minBid(auction: Auction): number {
+  return auction.bid + AUCTION_STEP;
+}
+
+/** Ставка — целое число не меньше minBid и не больше наличных того, чья очередь. */
+export function canBid(state: GameState, amount: number): boolean {
+  if (state.phase !== 'auction' || !state.auction) return false;
+  return Number.isInteger(amount) && amount >= minBid(state.auction) && amount <= actingPlayer(state).money;
+}
+
+export function tradeKey(from: string, to: string): string {
+  return `${from}>${to}`;
+}
+
+/** Клетки, которые игрок может отдать в обмене: свои, в квартале без построек (заложенные — можно, вместе с залогом). */
+export function tradableCells(state: GameState, playerId: string): number[] {
+  return ownedCells(state, playerId).filter((index) => {
+    const cell = BOARD[index];
+    return cell.kind !== 'district' || groupLevels(state, cell.group).every((l) => l === 0);
+  });
+}
+
+export const EMPTY_OFFER: TradeOffer = { cells: [], money: 0, releaseCards: [] };
+
+function offerValid(state: GameState, player: Player, offer: TradeOffer): boolean {
+  if (!Number.isInteger(offer.money) || offer.money < 0 || offer.money > player.money) return false;
+  if (new Set(offer.cells).size !== offer.cells.length) return false;
+  if (new Set(offer.releaseCards).size !== offer.releaseCards.length) return false;
+  const tradable = tradableCells(state, player.id);
+  return offer.cells.every((i) => tradable.includes(i)) && offer.releaseCards.every((id) => player.releaseCards.includes(id));
+}
+
+function offerEmpty(offer: TradeOffer): boolean {
+  return offer.cells.length === 0 && offer.money === 0 && offer.releaseCards.length === 0;
+}
+
+/** Обе стороны живы, всё отдаваемое у них есть и передаваемо, и сделка не пустая. Фазу не проверяет. */
+export function tradeAssetsValid(state: GameState, trade: Trade): boolean {
+  const from = state.players.find((p) => p.id === trade.from);
+  const to = state.players.find((p) => p.id === trade.to);
+  if (!from || !to || from === to || from.bankrupt || to.bankrupt) return false;
+  if (offerEmpty(trade.give) && offerEmpty(trade.take)) return false;
+  return offerValid(state, from, trade.give) && offerValid(state, to, trade.take);
+}
+
+/** Предлагать обмен можно в свой ход в фазах управления, одному адресату — не чаще раза за круг. */
+export function canProposeTrade(state: GameState, trade: Trade): boolean {
+  if (!MANAGE_PHASES.includes(state.phase) || trade.from !== actingPlayer(state).id) return false;
+  if (state.tradeRounds[tradeKey(trade.from, trade.to)] === state.round) return false;
+  return tradeAssetsValid(state, trade);
 }
 
 export function buildingLevel(state: GameState, index: number): number {

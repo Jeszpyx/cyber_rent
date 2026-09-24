@@ -28,6 +28,8 @@ export const GROUP_BUILD_COST: Record<DistrictGroup, number> = {
 /** Залог клетки даёт price × MORTGAGE_RATE; выкуп дороже на MORTGAGE_INTEREST_PERCENT процентов (с округлением вверх) */
 export const MORTGAGE_RATE = 0.5;
 export const MORTGAGE_INTEREST_PERCENT = 10;
+/** Минимальная ставка на торгах и шаг повышения; победитель платит свою ставку банку */
+export const AUCTION_STEP = 10;
 /** Рента монорельса по числу станций у владельца */
 export const TRANSIT_RENT = [25, 50, 100, 200];
 /** Множитель суммы кубиков для инфраструктуры: одна клетка / обе */

@@ -331,7 +331,7 @@ describe('debt phase', () => {
     expect(after.players[0].money).toBe(10 + 100 - BAIL);
     expect(after.players[0].isolation).toBeNull();
     expect(after.players[0].position).toBe(13);
-    expect(after.phase).toBe('end'); // на покупку 140₵ уже не хватает
+    expect(after.phase).toBe('auction'); // на покупку 140₵ уже не хватает — клетка уходит на торги (E1)
   });
 
   it('payEachPlayer continues the queue after the debt is paid', () => {
