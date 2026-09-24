@@ -325,6 +325,7 @@ export function parseAction(raw: unknown): Action | null {
 
 /** GET /api/config: что клиент узнаёт о сервере до входа. */
 export interface ServerConfig {
-  /** username бота и short name Mini App для ссылки t.me/<bot>/<app>?startapp=<код>; null — ссылка на сайт */
-  telegramApp: { bot: string; app: string } | null;
+  /** username бота и short name Mini App для ссылки t.me/<bot>/<app>?startapp=<код>
+   *  (app: null — t.me/<bot>?start=<код>, бот ответит кнопкой входа); null — ссылка на сайт */
+  telegramApp: { bot: string; app: string | null } | null;
 }

@@ -10,7 +10,8 @@ const GUEST_NAME = 'Гость';
 export interface ApiConfig {
   /** токен бота для проверки initData; без него вход через Telegram отключён */
   botToken?: string;
-  /** username бота и short name Mini App для ссылки-приглашения t.me/<bot>/<app>?startapp=<код> */
+  /** username бота и short name Mini App (из /newapp) для ссылки-приглашения t.me/<bot>/<app>?startapp=<код>;
+   *  без short name приглашение идёт через бота: t.me/<bot>?start=<код> */
   botUsername?: string;
   appShortName?: string;
 }
@@ -45,7 +46,7 @@ export function apiRouter(service: RoomService, config: ApiConfig): express.Rout
 
   router.get('/config', (_req, res) => {
     const { botUsername, appShortName } = config;
-    const body: ServerConfig = { telegramApp: botUsername && appShortName ? { bot: botUsername, app: appShortName } : null };
+    const body: ServerConfig = { telegramApp: botUsername ? { bot: botUsername, app: appShortName || null } : null };
     res.json(body);
   });
 

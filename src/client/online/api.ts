@@ -63,9 +63,11 @@ export function serverConfig(): Promise<ServerConfig | null> {
   return configRequest;
 }
 
-/** Ссылка-приглашение: в Mini App (если сервер знает бота и приложение) или на сайт с ?room=. */
+/** Ссылка-приглашение: прямо в Mini App, через бота (/start <код>) или на сайт с ?room=. */
 export function inviteLink(config: ServerConfig | null, code: string): string {
-  if (config?.telegramApp) return `https://t.me/${config.telegramApp.bot}/${config.telegramApp.app}?startapp=${code}`;
+  const tg = config?.telegramApp;
+  if (tg?.app) return `https://t.me/${tg.bot}/${tg.app}?startapp=${code}`;
+  if (tg) return `https://t.me/${tg.bot}?start=${code}`;
   return `${location.origin}/?room=${code}`;
 }
 
