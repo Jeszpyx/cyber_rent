@@ -5,7 +5,6 @@ import {
   GROUP_BUILD_COST,
   GROUP_COLORS,
   ISOLATION_ATTEMPTS,
-  START_SALARY,
   TOWER_LEVEL,
   TRANSIT_RENT,
   UTILITY_MULTIPLIERS,
@@ -18,7 +17,9 @@ import {
   canMortgage,
   canSellBuilding,
   canUnmortgage,
+  gameMode,
   mortgageValue,
+  rentMultiplier,
   sellBuildingResult,
   unmortgageCost,
 } from '../../shared/game/economy';
@@ -37,10 +38,10 @@ const KIND_LABELS: Record<string, string> = {
   neutral: 'Нейтральная зона',
 };
 
-function description(cell: Cell): string[] {
+function description(cell: Cell, state: GameState): string[] {
   switch (cell.kind) {
     case 'start':
-      return [`За каждый проход через Старт игрок получает ${START_SALARY}₵.`];
+      return [`За каждый проход через Старт игрок получает ${gameMode(state).salary}₵.`];
     case 'district': {
       const group = groupCells(cell.group).map((i) => BOARD[i].name).join(', ');
       return [
@@ -53,7 +54,7 @@ function description(cell: Cell): string[] {
     case 'utility':
       return [`Рента: сумма кубиков ×${UTILITY_MULTIPLIERS[0]}, при владении обеими — ×${UTILITY_MULTIPLIERS[1]}.`];
     case 'tax':
-      return [`Игрок платит ${cell.amount}₵ банку.`];
+      return [`Игрок платит ${cell.amount}₵ — деньги уходят в копилку Нейтральной зоны.`];
     case 'hack':
     case 'net':
       return [
@@ -72,7 +73,10 @@ function description(cell: Cell): string[] {
         `${DOUBLES_TO_ISOLATION} дубля подряд за один ход тоже ведут в Изолятор.`,
       ];
     case 'neutral':
-      return ['Безопасная зона. Здесь ничего не происходит.'];
+      return [
+        'Сюда стекаются налоги, штрафы, залоги за Изолятор и штрафы за бездействие.',
+        `Попавший на клетку забирает всю копилку. Сейчас в ней ${state.pot}₵.`,
+      ];
   }
 }
 
@@ -98,6 +102,7 @@ export function CellCard({ state, index, managerId, dispatch, onClose }: Props) 
   const color = cell.kind === 'district' ? GROUP_COLORS[cell.group] : 'var(--accent)';
   const level = state.buildings[index] ?? 0;
   const mortgaged = Boolean(state.mortgaged[index]);
+  const multiplier = rentMultiplier(state);
   const manageable = isOwnable(cell) && managerId !== null && owner?.id === managerId;
 
   return (
@@ -109,9 +114,10 @@ export function CellCard({ state, index, managerId, dispatch, onClose }: Props) 
         </div>
         <div className="cell-card-body">
           {isOwnable(cell) && <p className="price">Цена: {cell.price}₵</p>}
-          {description(cell).map((line) => (
+          {description(cell, state).map((line) => (
             <p key={line}>{line}</p>
           ))}
+          {isOwnable(cell) && multiplier > 1 && <p className="inflation">Инфляция: вся рента ×{multiplier}.</p>}
           {cell.kind === 'district' && (
             <table className="rent-table">
               <tbody>
@@ -119,7 +125,7 @@ export function CellCard({ state, index, managerId, dispatch, onClose }: Props) 
                   <tr key={i} className={owner && i === level ? 'active' : undefined}>
                     <td>{RENT_LABELS[i]}</td>
                     <td>
-                      {value}₵{i === 0 && <small> (весь квартал — {value * 2}₵)</small>}
+                      {value * multiplier}₵{i === 0 && <small> (весь квартал — {value * 2 * multiplier}₵)</small>}
                     </td>
                   </tr>
                 ))}

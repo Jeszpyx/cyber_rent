@@ -10,7 +10,6 @@ import {
   ownedCells,
   unmortgageCost,
 } from './economy';
-import { currentPlayer } from './engine';
 import type { Action, GameState, OwnableCell } from './types';
 
 const BOT_CASH_RESERVE = 200;
@@ -26,7 +25,7 @@ export function decideBotAction(state: GameState): Action | null {
     case 'isolation':
       return decideInIsolation(state);
     case 'buyDecision': {
-      const player = currentPlayer(state);
+      const player = actingPlayer(state);
       const cell = BOARD[player.position] as OwnableCell;
       return player.money - cell.price >= BOT_CASH_RESERVE ? { type: 'BUY' } : { type: 'SKIP_BUY' };
     }
@@ -42,7 +41,7 @@ export function decideBotAction(state: GameState): Action | null {
 }
 
 function decideInIsolation(state: GameState): Action {
-  const player = currentPlayer(state);
+  const player = actingPlayer(state);
   const freeCells = BOARD.filter((c) => isOwnable(c) && state.owners[c.index] === undefined).length;
   const early = freeCells >= BOT_LEAVE_ISOLATION_FREE_CELLS;
   // На последней попытке карточка лучше принудительного залога.
@@ -54,7 +53,7 @@ function decideInIsolation(state: GameState): Action {
 
 /** В конце хода: сначала выкупить заложенное, потом строить — пока остаётся запас. */
 function decideDevelopment(state: GameState): Action | null {
-  const player = currentPlayer(state);
+  const player = actingPlayer(state);
   const owned = ownedCells(state, player.id);
   const redeem = owned.find(
     (i) => canUnmortgage(state, i) && player.money - unmortgageCost(BOARD[i] as OwnableCell) >= BOT_BUILD_RESERVE,

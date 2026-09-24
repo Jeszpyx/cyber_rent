@@ -9,7 +9,34 @@ import {
   groupCells,
   isOwnable,
 } from './board';
+import { MODES, type GameMode } from './modes';
 import type { DistrictGroup, GameState, OwnableCell, Phase, Player } from './types';
+
+export function gameMode(state: GameState): GameMode {
+  return MODES[state.mode];
+}
+
+/** Множитель ренты режима «Инфляция»: factor в степени числа пройденных порогов по кругам. */
+export function rentMultiplier(state: GameState): number {
+  const growth = gameMode(state).rentGrowth;
+  if (!growth) return 1;
+  return growth.factor ** Math.floor(state.round / growth.everyRounds);
+}
+
+/**
+ * Капитал для победы по лимиту кругов: наличные, клетки по цене покупки
+ * (заложенные — за вычетом полученного залога) и постройки по цене строительства.
+ */
+export function netWorth(state: GameState, player: Player): number {
+  if (player.bankrupt) return 0;
+  let total = player.money;
+  for (const index of ownedCells(state, player.id)) {
+    const cell = BOARD[index] as OwnableCell;
+    total += cell.price - (state.mortgaged[index] ? mortgageValue(cell) : 0);
+    total += buildingLevel(state, index) * buildCost(index);
+  }
+  return total;
+}
 
 /** Фазы своего хода, в которых можно строить, продавать, закладывать и выкупать. */
 const MANAGE_PHASES: Phase[] = ['roll', 'isolation', 'end'];

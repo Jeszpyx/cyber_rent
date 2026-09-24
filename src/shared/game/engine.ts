@@ -4,13 +4,12 @@ import {
   DOUBLES_TO_ISOLATION,
   ISOLATION_ATTEMPTS,
   ISOLATION_INDEX,
-  START_MONEY,
-  START_SALARY,
   TOWER_LEVEL,
   TRANSIT_RENT,
   UTILITY_MULTIPLIERS,
   isOwnable,
 } from './board';
+import { decideBotAction } from './bot';
 import { CARD_BY_ID, DECK_NAMES, deckCardIds } from './cards';
 import {
   actingPlayer,
@@ -21,12 +20,16 @@ import {
   canMortgage,
   canSellBuilding,
   canUnmortgage,
+  gameMode,
   hasMonopoly,
   liquidationValue,
   mortgageValue,
+  netWorth,
+  rentMultiplier,
   sellBuildingResult,
   unmortgageCost,
 } from './economy';
+import { DEFAULT_MODE, MODES, type GameModeId } from './modes';
 import { rollDie, shuffle } from './rng';
 import type { Action, Card, CardDeck, Debt, GameState, OwnableCell, Payment, Player } from './types';
 
@@ -40,11 +43,15 @@ export interface NewGameOptions {
   playerName: string;
   bots: number;
   seed?: number;
+  mode?: GameModeId;
+  /** ежедневный бонус (dailyBonus.ts) — прибавляется к стартовым деньгам человека */
+  startBonus?: number;
 }
 
-export function createGame({ playerName, bots, seed }: NewGameOptions): GameState {
+export function createGame({ playerName, bots, seed, mode = DEFAULT_MODE, startBonus = 0 }: NewGameOptions): GameState {
+  const { startMoney } = MODES[mode];
   const players: Player[] = [
-    { id: 'p0', name: playerName, isBot: false, color: PLAYER_COLORS[0], money: START_MONEY, position: 0, bankrupt: false, releaseCards: [], isolation: null },
+    { id: 'p0', name: playerName, isBot: false, color: PLAYER_COLORS[0], money: startMoney + startBonus, position: 0, bankrupt: false, releaseCards: [], isolation: null, idleStrikes: 0 },
   ];
   for (let i = 0; i < bots; i++) {
     players.push({
@@ -52,16 +59,19 @@ export function createGame({ playerName, bots, seed }: NewGameOptions): GameStat
       name: BOT_NAMES[i],
       isBot: true,
       color: PLAYER_COLORS[i + 1],
-      money: START_MONEY,
+      money: startMoney,
       position: 0,
       bankrupt: false,
       releaseCards: [],
       isolation: null,
+      idleStrikes: 0,
     });
   }
   const [hack, s1] = shuffle(deckCardIds('hack'), seed ?? Math.floor(Math.random() * 2 ** 31));
   const [net, s2] = shuffle(deckCardIds('net'), s1);
   const state: GameState = {
+    mode,
+    round: 1,
     players,
     currentPlayer: 0,
     phase: 'roll',
@@ -71,6 +81,7 @@ export function createGame({ playerName, bots, seed }: NewGameOptions): GameStat
     owners: {},
     buildings: {},
     mortgaged: {},
+    pot: 0,
     debt: null,
     decks: { hack, net },
     pendingCard: null,
@@ -79,7 +90,8 @@ export function createGame({ playerName, bots, seed }: NewGameOptions): GameStat
     logCounter: 0,
     winnerId: null,
   };
-  log(state, `Игра началась. Первым ходит ${players[0].name}.`);
+  log(state, `Игра началась, режим «${MODES[mode].name}». Первым ходит ${players[0].name}.`);
+  if (startBonus > 0) log(state, `${players[0].name} получает ежедневный бонус ${startBonus}₵.`);
   return state;
 }
 
@@ -88,6 +100,36 @@ export function currentPlayer(state: GameState): Player {
 }
 
 export function applyAction(prev: GameState, action: Action): GameState {
+  if (action.type === 'TIMEOUT') return timeout(prev);
+  const next = reduce(prev, action);
+  // Любое своё действие обнуляет счётчик таймаутов того, кто принимал решение.
+  const actorId = actingPlayer(prev).id;
+  if (next !== prev) playerById(next, actorId).idleStrikes = 0;
+  return next;
+}
+
+/**
+ * Время на решение вышло: штраф наличными в копилку (без долга и банкротства), затем за игрока
+ * действует бот. После idleStrikesLimit таймаутов подряд игрок насовсем передаётся боту.
+ */
+function timeout(prev: GameState): GameState {
+  if (prev.phase === 'gameOver') return prev;
+  const state = structuredClone(prev);
+  const mode = gameMode(state);
+  const player = actingPlayer(state);
+  const fine = Math.min(mode.idleFine, Math.max(player.money, 0));
+  transfer(state, player, null, fine);
+  player.idleStrikes += 1;
+  log(state, `${player.name} не успевает с решением${fine > 0 ? ` и платит штраф ${fine}₵ в Нейтральную зону` : ''}.`);
+  if (!player.isBot && player.idleStrikes >= mode.idleStrikesLimit) {
+    player.isBot = true;
+    log(state, `${player.name} слишком долго молчит — управление перехватывает бот.`);
+  }
+  const fallback = decideBotAction(state);
+  return fallback ? reduce(state, fallback) : state;
+}
+
+function reduce(prev: GameState, action: Action): GameState {
   if (prev.phase === 'gameOver') return prev;
   switch (action.type) {
     case 'ROLL': {
@@ -131,7 +173,7 @@ export function applyAction(prev: GameState, action: Action): GameState {
       const state = structuredClone(prev);
       const player = currentPlayer(state);
       log(state, `${player.name} платит залог ${BAIL}₵ и выходит из Изолятора.`);
-      transfer(player, null, BAIL);
+      transfer(state, player, null, BAIL);
       release(state, player);
       return state;
     }
@@ -195,7 +237,7 @@ export function applyAction(prev: GameState, action: Action): GameState {
       state.debt = null;
       const from = playerById(state, debt.from);
       const to = debt.to === null ? null : playerById(state, debt.to);
-      transfer(from, to, debt.amount);
+      transfer(state, from, to, debt.amount);
       log(state, `${from.name} расплачивается: ${debt.amount}₵ ${to ? `игроку ${to.name}` : 'банку'}.`);
       settle(state, debt.queue, debt.then);
       return state;
@@ -215,6 +257,9 @@ export function applyAction(prev: GameState, action: Action): GameState {
       nextPlayer(state);
       return state;
     }
+    case 'TIMEOUT':
+      // Обрабатывается в applyAction; бот этот Action не выбирает.
+      return prev;
   }
 }
 
@@ -305,9 +350,21 @@ function landOn(state: GameState): void {
   } else if (cell.kind === 'hack' || cell.kind === 'net') {
     drawCard(state, cell.kind);
     return;
+  } else if (cell.kind === 'neutral') {
+    collectPot(state, player);
   }
 
   finishMove(state);
+}
+
+function collectPot(state: GameState, player: Player): void {
+  if (state.pot === 0) {
+    log(state, 'Копилка Нейтральной зоны пуста.');
+    return;
+  }
+  log(state, `${player.name} забирает копилку Нейтральной зоны: ${state.pot}₵.`);
+  player.money += state.pot;
+  state.pot = 0;
 }
 
 function drawCard(state: GameState, deck: CardDeck): void {
@@ -373,10 +430,17 @@ function applyCard(state: GameState, card: Card): void {
   finishMove(state);
 }
 
-/** Заложенная клетка ренты не приносит. Монополия без построек удваивает базовую ренту района. */
+/**
+ * Заложенная клетка ренты не приносит. Монополия без построек удваивает базовую ренту района.
+ * В режиме «Инфляция» итог умножается на rentMultiplier.
+ */
 export function calculateRent(state: GameState, cell: OwnableCell, diceSum: number): number {
   const ownerId = state.owners[cell.index];
   if (ownerId === undefined || state.mortgaged[cell.index]) return 0;
+  return baseRent(state, cell, ownerId, diceSum) * rentMultiplier(state);
+}
+
+function baseRent(state: GameState, cell: OwnableCell, ownerId: string, diceSum: number): number {
   if (cell.kind === 'district') {
     const level = buildingLevel(state, cell.index);
     if (level > 0) return cell.rent[level];
@@ -410,8 +474,9 @@ function moveBy(state: GameState, player: Player, steps: number): void {
 }
 
 function paySalary(state: GameState, player: Player): void {
-  player.money += START_SALARY;
-  log(state, `${player.name} проходит Старт и получает ${START_SALARY}₵.`);
+  const { salary } = gameMode(state);
+  player.money += salary;
+  log(state, `${player.name} проходит Старт и получает ${salary}₵.`);
 }
 
 function sendToIsolation(state: GameState, player: Player): void {
@@ -436,9 +501,11 @@ function playerById(state: GameState, id: string): Player {
   return state.players.find((p) => p.id === id)!;
 }
 
-function transfer(from: Player, to: Player | null, amount: number): void {
+/** Платёж без получателя — штраф: деньги уходят в копилку «Нейтральной зоны». */
+function transfer(state: GameState, from: Player, to: Player | null, amount: number): void {
   from.money -= amount;
   if (to) to.money += amount;
+  else state.pot += amount;
 }
 
 /**
@@ -454,7 +521,7 @@ function settle(state: GameState, payments: Payment[], then: Debt['then']): void
     const to = payment.to === null ? null : playerById(state, payment.to);
     if (from.bankrupt || payment.amount <= 0) continue;
     if (from.money >= payment.amount) {
-      transfer(from, to, payment.amount);
+      transfer(state, from, to, payment.amount);
     } else if (liquidationValue(state, from) >= payment.amount) {
       state.debt = { ...payment, queue: payments.slice(i + 1), then };
       state.phase = 'debt';
@@ -521,6 +588,11 @@ function nextPlayer(state: GameState): void {
   do {
     next = (next + 1) % state.players.length;
   } while (state.players[next].bankrupt);
+  // Ход вернулся к первому живому игроку — начинается новый круг.
+  if (next <= state.currentPlayer) {
+    startRound(state);
+    if (state.phase === 'gameOver') return;
+  }
   const player = state.players[next];
   state.currentPlayer = next;
   state.phase = player.isolation ? 'isolation' : 'roll';
@@ -528,6 +600,39 @@ function nextPlayer(state: GameState): void {
   state.rolledDouble = false;
   state.doublesInRow = 0;
   log(state, `Ход игрока ${player.name}${player.isolation ? ' (в Изоляторе)' : ''}.`);
+}
+
+/** Новый круг: в «Блице» после лимита — конец партии, в «Инфляции» на пороге — рост ренты. */
+function startRound(state: GameState): void {
+  const mode = gameMode(state);
+  if (mode.roundLimit !== null && state.round >= mode.roundLimit) {
+    finishByNetWorth(state);
+    return;
+  }
+  const before = rentMultiplier(state);
+  state.round += 1;
+  const limit = mode.roundLimit !== null ? ` из ${mode.roundLimit}` : '';
+  log(state, `Круг ${state.round}${limit}.`);
+  const after = rentMultiplier(state);
+  if (after !== before) log(state, `Инфляция! Вся рента в городе теперь ×${after}.`);
+}
+
+/** Лимит кругов: побеждает самый богатый по капиталу, при равенстве — у кого больше наличных, затем кто раньше ходит. */
+function finishByNetWorth(state: GameState): void {
+  const ranking = standings(state);
+  const winner = ranking[0].player;
+  log(state, `Лимит кругов исчерпан. Капиталы: ${ranking.map((r) => `${r.player.name} ${r.worth}₵`).join(', ')}.`);
+  state.phase = 'gameOver';
+  state.winnerId = winner.id;
+  log(state, `${winner.name} побеждает по капиталу!`);
+}
+
+/** Живые игроки по убыванию капитала (netWorth), затем наличных; при равенстве — по порядку хода. */
+export function standings(state: GameState): { player: Player; worth: number }[] {
+  return state.players
+    .filter((p) => !p.bankrupt)
+    .map((player) => ({ player, worth: netWorth(state, player) }))
+    .sort((a, b) => b.worth - a.worth || b.player.money - a.player.money);
 }
 
 function log(state: GameState, text: string): void {

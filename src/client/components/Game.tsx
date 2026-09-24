@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { BAIL, BOARD, ISOLATION_ATTEMPTS } from '../../shared/game/board';
 import { CARD_BY_ID } from '../../shared/game/cards';
-import { canBuild, ownedCells } from '../../shared/game/economy';
-import { actingPlayer, currentPlayer, type NewGameOptions } from '../../shared/game/engine';
+import { canBuild, gameMode, ownedCells, rentMultiplier } from '../../shared/game/economy';
+import { actingPlayer, currentPlayer, standings, type NewGameOptions } from '../../shared/game/engine';
 import type { OwnableCell } from '../../shared/game/types';
 import { useGame } from '../hooks/useGame';
 import { Board } from './Board';
@@ -11,6 +11,7 @@ import { CellCard } from './CellCard';
 import { Dice } from './Dice';
 import { DrawnCard } from './DrawnCard';
 import { PlayerPanel } from './PlayerPanel';
+import { TurnTimer } from './TurnTimer';
 
 interface Props {
   options: NewGameOptions;
@@ -18,7 +19,7 @@ interface Props {
 }
 
 export function Game({ options, onRestart }: Props) {
-  const { state, dispatch } = useGame(options);
+  const { state, dispatch, deadline } = useGame(options);
   const [selectedCell, setSelectedCell] = useState<number | null>(null);
 
   const player = currentPlayer(state);
@@ -30,13 +31,27 @@ export function Game({ options, onRestart }: Props) {
   const canDevelop = humanTurn && ownedCells(state, actor.id).some((i) => canBuild(state, i));
   const winner = state.players.find((p) => p.id === state.winnerId);
   const buyCell = state.phase === 'buyDecision' ? (BOARD[player.position] as OwnableCell) : null;
-  const drawnCard = state.phase === 'card' && state.pendingCard ? CARD_BY_ID[state.pendingCard] : null;
+  const mode = gameMode(state);
+  const multiplier = rentMultiplier(state);
+  // Победа по лимиту кругов: к концу партии в игре осталось больше одного игрока.
+  const finalStandings = winner && state.players.filter((p) => !p.bankrupt).length > 1 ? standings(state) : null;
+  const drawnCard =state.phase === 'card' && state.pendingCard ? CARD_BY_ID[state.pendingCard] : null;
 
   return (
     <div className="game">
       <Board state={state} onCellClick={setSelectedCell}>
         <div className="turn-label" style={{ color: player.color }}>
           {state.phase === 'gameOver' ? 'Игра окончена' : `Ход: ${player.name}`}
+        </div>
+        <div className="game-status">
+          <span title={mode.description}>{mode.name}</span>
+          <span>
+            Круг {state.round}
+            {mode.roundLimit !== null && `/${mode.roundLimit}`}
+          </span>
+          <span title="Копилка Нейтральной зоны: налоги и штрафы, забирает попавший на клетку">☯ {state.pot}₵</span>
+          {multiplier > 1 && <span className="inflation">рента ×{multiplier}</span>}
+          {humanTurn && deadline !== null && <TurnTimer key={deadline} deadline={deadline} />}
         </div>
         <Dice dice={state.dice} />
         <div className="actions">
@@ -148,6 +163,19 @@ export function Game({ options, onRestart }: Props) {
         <div className="overlay">
           <div className="modal">
             <h2 style={{ color: winner.color }}>{winner.name} побеждает!</h2>
+            {finalStandings && (
+              <>
+                <p className="standings-title">Лимит кругов исчерпан. Капитал:</p>
+                <ol className="standings">
+                  {finalStandings.map(({ player: p, worth }) => (
+                    <li key={p.id}>
+                      <span style={{ color: p.color }}>{p.name}</span>
+                      <b>{worth}₵</b>
+                    </li>
+                  ))}
+                </ol>
+              </>
+            )}
             <button className="btn primary" onClick={onRestart}>
               Новая игра
             </button>

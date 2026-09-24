@@ -1,3 +1,5 @@
+import type { GameModeId } from './modes';
+
 export type DistrictGroup =
   | 'rust'
   | 'neon'
@@ -65,6 +67,8 @@ export interface Player {
   releaseCards: string[];
   /** null — на свободе; turnsLeft — сколько попыток выбросить дубль осталось */
   isolation: { turnsLeft: number } | null;
+  /** таймаутов подряд; сбрасывается любым своим действием, на лимите режима игроком управляет бот */
+  idleStrikes: number;
 }
 
 /**
@@ -94,6 +98,10 @@ export interface LogEntry {
 }
 
 export interface GameState {
+  /** режим партии: правила и константы в MODES (modes.ts) */
+  mode: GameModeId;
+  /** номер круга с 1; круг заканчивается, когда ход возвращается к первому живому игроку */
+  round: number;
   players: Player[];
   currentPlayer: number;
   phase: Phase;
@@ -107,6 +115,8 @@ export interface GameState {
   buildings: Record<number, number>;
   /** заложенные клетки: рента не берётся, строить в квартале нельзя */
   mortgaged: Record<number, true>;
+  /** копилка «Нейтральной зоны»: все штрафы банку (settle с to: null, залог, таймаут); забирает попавший на клетку */
+  pot: number;
   /** неоплаченный платёж в фазе 'debt' */
   debt: Debt | null;
   /** id карточек, верх колоды — первый элемент */
@@ -132,4 +142,6 @@ export type Action =
   | { type: 'UNMORTGAGE'; index: number }
   | { type: 'PAY_DEBT' }
   | { type: 'DECLARE_BANKRUPTCY' }
-  | { type: 'END_TURN' };
+  | { type: 'END_TURN' }
+  /** время на решение вышло: штраф actingPlayer в копилку, затем за него действует бот */
+  | { type: 'TIMEOUT' };
