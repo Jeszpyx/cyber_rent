@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
 
-const FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+/** Точки грани на сетке 3×3 (номера ячеек слева направо, сверху вниз). */
+const PIPS: Record<number, number[]> = {
+  1: [4],
+  2: [0, 8],
+  3: [0, 4, 8],
+  4: [0, 2, 6, 8],
+  5: [0, 2, 4, 6, 8],
+  6: [0, 2, 3, 5, 6, 8],
+};
 /** Как часто меняются грани, пока кубики катятся (ms). */
 const SHUFFLE_MS = 70;
 
@@ -17,13 +25,22 @@ export function Dice({ dice, rolling }: { dice: [number, number] | null; rolling
   }, [rolling]);
 
   const shown = rolling ? faces : dice;
+  const label = shown && !rolling ? `Выпало ${shown[0]} и ${shown[1]}` : 'Кубики';
   return (
-    <div className={rolling ? 'dice rolling' : 'dice'}>
-      {(shown ?? [null, null]).map((value, i) => (
-        <span key={i} className={value ? 'die' : 'die empty'}>
-          {value ? FACES[value - 1] : '?'}
-        </span>
-      ))}
+    <div className={rolling ? 'dice rolling' : 'dice'} role="img" aria-label={label}>
+      {(shown ?? [null, null]).map((value, i) =>
+        value ? (
+          <span key={i} className="die">
+            {Array.from({ length: 9 }, (_, cell) => (
+              <span key={cell} className={PIPS[value].includes(cell) ? 'pip' : undefined} />
+            ))}
+          </span>
+        ) : (
+          <span key={i} className="die empty">
+            ?
+          </span>
+        ),
+      )}
     </div>
   );
 }

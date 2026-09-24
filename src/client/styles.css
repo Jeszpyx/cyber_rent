@@ -182,239 +182,516 @@ button {
 
 /* ---------- game layout ---------- */
 
+/* экран партии ровно в высоту окна: сверху полоска статуса, остальное — поле */
 .game {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--pad);
-  padding: calc(var(--pad) + var(--safe-top)) var(--pad) calc(var(--pad) + var(--safe-bottom));
-  min-height: 100dvh;
-}
-
-.board-wrap {
-  display: flex;
-  justify-content: center;
-}
-
-.board {
-  width: min(100%, 720px);
-  aspect-ratio: 1;
-  display: grid;
-  grid-template-columns: 1.35fr repeat(9, 1fr) 1.35fr;
-  grid-template-rows: 1.35fr repeat(9, 1fr) 1.35fr;
-  gap: 1px;
-  padding: 1px;
-  background: var(--line);
-  border: 1px solid var(--accent-2);
-  border-radius: 6px;
-  box-shadow: 0 0 22px rgb(62 230 255 / 25%);
-  container-type: inline-size;
-}
-
-.side {
   display: flex;
   flex-direction: column;
   gap: var(--pad);
-  min-height: 0;
+  height: 100dvh;
+  padding: calc(var(--pad) + var(--safe-top)) max(var(--pad), env(safe-area-inset-right))
+    calc(var(--pad) + var(--safe-bottom)) max(var(--pad), env(safe-area-inset-left));
 }
 
-@media (min-width: 900px) {
-  .game {
-    grid-template-columns: minmax(0, 1fr) 340px;
-    height: 100dvh;
-  }
+.topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
-  .board-wrap {
-    align-items: center;
-    min-height: 0;
-  }
+.topbar-menu {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 
-  .board {
-    width: min(100%, calc(100dvh - 2 * var(--pad) - var(--safe-top) - var(--safe-bottom)));
-    max-width: none;
+.game-status {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 10px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.inflation {
+  color: #ff8a1f;
+}
+
+.icon-btn {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--muted);
+  transition: color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.icon-btn.active,
+.icon-btn[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--accent-2) 60%, var(--line));
+  color: var(--accent-2);
+}
+
+.icon-btn:active {
+  transform: scale(0.94);
+}
+
+/* ---------- board ---------- */
+
+/* поле занимает всё оставшееся место; пропорции ограничены, чтобы клетки не расплющивало */
+.board-wrap {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+}
+
+.board {
+  --corner: 1.3fr;
+  display: grid;
+  grid-template-columns: var(--corner) repeat(var(--cols), minmax(0, 1fr)) var(--corner);
+  grid-template-rows: var(--corner) repeat(var(--rows), minmax(0, 1fr)) var(--corner);
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--accent-2) 50%, transparent);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgb(255 46 154 / 22%), transparent 35%, transparent 65%, rgb(62 230 255 / 22%)),
+    #1d1536;
+  box-shadow:
+    0 0 28px rgb(62 230 255 / 16%),
+    0 0 60px rgb(255 46 154 / 8%);
+  container: board / size;
+}
+
+.board.portrait {
+  width: min(100cqw, 100cqh * 0.8);
+  height: min(100cqh, 100cqw * 2.1);
+}
+
+.board.landscape {
+  width: min(100cqw, 100cqh * 1.6);
+  height: min(100cqh, 100cqw * 0.8);
+}
+
+/* телефон боком: высоты мало, поле растягивается вширь */
+@media (max-height: 520px) {
+  .board.landscape {
+    width: min(100cqw, 100cqh * 2.4);
   }
 }
 
 /* ---------- cells ---------- */
 
 .cell {
+  /* --kind — цвет иконки и подписи, --tint — подкраска фона */
+  --kind: var(--muted);
+  --tint: transparent;
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.2cqi;
   min-width: 0;
+  min-height: 0;
+  padding: 0;
   overflow: hidden;
-  padding: 0.3cqi;
-  border: 2px solid transparent;
-  background: var(--bg-2);
-  font-size: 1.75cqi;
+  border: 0;
+  border-radius: 5px;
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--tint) 20%, #1b1335),
+    color-mix(in srgb, var(--tint) 8%, #100a21)
+  );
+  font-size: max(8px, 2.1cqmin);
   line-height: 1.05;
   text-align: center;
 }
 
-.cell:hover {
-  background: #221640;
+@media (hover: hover) {
+  .cell:hover {
+    filter: brightness(1.25);
+  }
 }
 
-.cell-stripe {
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 22%;
+.cell:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: -2px;
 }
 
-.cell-district .cell-name {
-  margin-top: 18%;
+/* цветная планка с ценой — на внешнем крае клетки */
+.side-bottom {
+  flex-direction: column-reverse;
 }
 
-.cell-name {
-  max-width: 100%;
-  white-space: nowrap;
-  font-size: 0.9em;
+.side-left {
+  flex-direction: row;
+}
+
+.side-right {
+  flex-direction: row-reverse;
+}
+
+.cell-district {
+  --kind: var(--group);
+}
+
+.cell-transit {
+  --kind: #b9c6ff;
+}
+
+.cell-utility {
+  --kind: #7af0c0;
+}
+
+.cell-tax {
+  --kind: #ff8a1f;
+}
+
+.cell-start {
+  --kind: #2eff8c;
+  --tint: #2eff8c;
+}
+
+.cell-net {
+  --kind: var(--accent-2);
+  --tint: var(--accent-2);
+}
+
+.cell-hack {
+  --kind: var(--accent);
+  --tint: var(--accent);
+}
+
+.cell-isolation,
+.cell-goToIsolation {
+  --kind: #ff2e5b;
+  --tint: #ff2e5b;
+}
+
+.cell-neutral {
+  --kind: #ffe14d;
+  --tint: #ffe14d;
+}
+
+.cell-band {
+  flex: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--group, #5a5287);
+  color: #0b0716;
+  font-size: max(8px, 2.3cqmin);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.side-top .cell-band,
+.side-bottom .cell-band {
+  height: max(12px, 3.4cqmin);
+}
+
+.side-left .cell-band,
+.side-right .cell-band {
+  width: max(12px, 3.4cqmin);
+  writing-mode: vertical-rl;
+}
+
+.side-left .cell-band {
+  transform: rotate(180deg);
+}
+
+.cell-transit .cell-band {
+  background: #5a6699;
+  color: #fff;
+}
+
+.cell-utility .cell-band {
+  background: #2c7c66;
+  color: #fff;
+}
+
+.cell-tax .cell-band {
+  background: #ff8a1f;
+}
+
+.cell-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6cqmin;
+  padding: 0.5cqmin;
 }
 
 .cell-icon {
-  font-size: 2.6cqi;
-  line-height: 1;
+  flex: none;
+  width: max(14px, 5.4cqmin);
+  height: max(14px, 5.4cqmin);
+  color: var(--kind);
+  filter: drop-shadow(0 0 0.8cqmin color-mix(in srgb, var(--kind) 70%, transparent));
 }
 
-.cell-start,
-.cell-isolation,
-.cell-goToIsolation,
-.cell-neutral {
-  background: #1d1038;
-  font-weight: 700;
+.side-corner .cell-icon {
+  width: max(18px, 7cqmin);
+  height: max(18px, 7cqmin);
 }
 
-.cell-owner {
+.side-corner .cell-label {
+  letter-spacing: 0;
+}
+
+.cell-label,
+.cell-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-label {
+  color: var(--kind);
+  font-size: max(7px, 1.8cqmin);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* названия районов — только когда клетки крупные; на телефоне хватает иконки и цены */
+.cell-name {
+  display: none;
+  color: var(--text);
+  font-size: 1.7cqmin;
+  opacity: 0.85;
+}
+
+@container board (min-width: 640px) and (min-height: 560px) {
+  .cell-name {
+    display: block;
+  }
+}
+
+/* клетка с владельцем подкрашена и обведена его цветом */
+.cell.owned {
+  --tint: var(--owner);
+}
+
+.cell.owned::after {
+  content: '';
   position: absolute;
-  right: 0.4cqi;
-  bottom: 0.4cqi;
-  width: 1.3cqi;
-  height: 1.3cqi;
-  border-radius: 2px;
-  transform: rotate(45deg);
+  inset: 0;
+  border: 2px solid var(--owner);
+  border-radius: inherit;
+  box-shadow: inset 0 0 1.4cqmin color-mix(in srgb, var(--owner) 50%, transparent);
+  pointer-events: none;
 }
 
-/* постройки — на цветной полоске района */
+/* заложенная клетка — приглушена и заштрихована */
+.cell.mortgaged::after {
+  background: repeating-linear-gradient(135deg, transparent 0 5px, rgb(255 255 255 / 9%) 5px 8px);
+}
+
+.cell.mortgaged .cell-body,
+.cell.mortgaged .cell-band {
+  opacity: 0.4;
+}
+
+/* клетка, где стоит фишка того, чей ход, — пульсирует его цветом */
+.cell.active::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 2px var(--active),
+    inset 0 0 2.5cqmin var(--active);
+  animation: pulse 1.2s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes pulse {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .cell-buildings {
-  position: absolute;
-  inset: 0 0 auto 0;
-  z-index: 1;
   display: flex;
-  justify-content: center;
   align-items: center;
-  gap: 0.25cqi;
-  height: 2.2cqi;
+  gap: 0.4cqmin;
 }
 
 .cell-buildings .module,
 .cell-buildings .tower {
-  height: 1.3cqi;
-  border: 1px solid #0b0716;
   border-radius: 1px;
 }
 
 .cell-buildings .module {
-  width: 1.3cqi;
+  width: max(4px, 1.4cqmin);
+  height: max(4px, 1.4cqmin);
   background: #2eff8c;
+  box-shadow: 0 0 0.6cqmin #2eff8c;
 }
 
 .cell-buildings .tower {
-  width: 3.4cqi;
-  height: 1.6cqi;
+  width: max(10px, 3.6cqmin);
+  height: max(5px, 1.7cqmin);
   background: #ff2e5b;
-  box-shadow: 0 0 4px #ff2e5b;
-}
-
-/* заложенная клетка — приглушена и заштрихована */
-.cell.mortgaged {
-  background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgb(255 255 255 / 7%) 6px 9px);
-}
-
-.cell.mortgaged .cell-name,
-.cell.mortgaged .cell-icon,
-.cell.mortgaged .cell-stripe {
-  opacity: 0.45;
+  box-shadow: 0 0 0.8cqmin #ff2e5b;
 }
 
 .tokens {
   position: absolute;
-  left: 0.3cqi;
-  bottom: 0.3cqi;
+  inset: 0;
+  z-index: 3;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.3cqi;
-  max-width: 80%;
+  align-content: center;
+  justify-content: center;
+  gap: 0.5cqmin;
+  padding: 1cqmin;
+  pointer-events: none;
 }
 
 .token {
-  display: inline-block;
-  width: 2.1cqi;
-  height: 2.1cqi;
+  flex: none;
+  width: max(10px, 3.6cqmin);
+  height: max(10px, 3.6cqmin);
+  border: 1.5px solid rgb(255 255 255 / 90%);
   border-radius: 50%;
-  border: 1px solid #fff;
-  box-shadow: 0 0 6px currentColor;
+  background: radial-gradient(circle at 35% 30%, #fff 0 10%, var(--pc) 50%);
+  box-shadow:
+    0 0 1.2cqmin var(--pc),
+    0 1px 3px rgb(0 0 0 / 60%);
 }
 
 /* решётка поверх фишки задержанного */
 .token.isolated {
   border-color: #ff2e5b;
-  background-image: repeating-linear-gradient(90deg, transparent 0 22%, rgb(11 7 22 / 80%) 22% 36%);
-  box-shadow: 0 0 6px #ff2e5b;
-}
-
-.token.big {
-  width: 14px;
-  height: 14px;
-  flex: none;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 22%, rgb(11 7 22 / 80%) 22% 36%),
+    var(--pc);
 }
 
 /* ---------- board center ---------- */
 
 .board-center {
-  grid-row: 2 / 11;
-  grid-column: 2 / 11;
+  grid-row: 2 / -2;
+  grid-column: 2 / -2;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 10px;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgb(255 46 154 / 12%), transparent 60%),
+    radial-gradient(ellipse at 50% 100%, rgb(62 230 255 / 9%), transparent 60%),
+    #0d0819;
+  font-size: 0.9rem;
+  container: center / size;
+}
+
+/* узкий центр (телефон): всё столбиком, лог забирает остаток высоты; широкий — лог справа */
+.center-inner {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+
+.center-main {
+  flex: 0 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+@container center (min-aspect-ratio: 5 / 4) {
+  .center-inner {
+    flex-direction: row;
+  }
+
+  .center-main {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: safe center;
+  }
+
+  .center-inner > .log-panel {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+.turn-row {
+  display: flex;
+  align-items: baseline;
   justify-content: center;
-  gap: 3cqi;
-  padding: 2cqi;
-  background:
-    radial-gradient(circle at 50% 40%, rgb(255 46 154 / 14%), transparent 60%),
-    var(--bg);
-  font-size: clamp(0.8rem, 3.4cqi, 1.1rem);
+  gap: 10px;
 }
 
 .turn-label {
-  font-weight: 700;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
   text-shadow: 0 0 10px currentColor;
 }
 
 .dice {
   display: flex;
-  gap: 3cqi;
+  gap: 12px;
 }
 
 .die {
-  font-size: 13cqi;
-  line-height: 1;
-  color: var(--accent-2);
-  text-shadow: 0 0 12px var(--accent-2);
+  display: grid;
+  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 6px;
+  border: 1px solid var(--accent-2);
+  border-radius: 11px;
+  background: linear-gradient(145deg, #2a1d4f, #140d26);
+  box-shadow:
+    0 0 12px rgb(62 230 255 / 35%),
+    inset 0 -3px 0 rgb(0 0 0 / 35%);
+}
+
+.die .pip {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  box-shadow: 0 0 5px var(--accent-2);
 }
 
 .die.empty {
   display: grid;
-  place-items: center;
-  width: 11cqi;
-  height: 11cqi;
-  font-size: 6cqi;
+  grid-template: none;
   border: 1px dashed var(--line);
-  border-radius: 12%;
+  background: none;
+  box-shadow: none;
   color: var(--muted);
-  text-shadow: none;
+  font-size: 1.2rem;
 }
 
 .btn:disabled {
@@ -438,24 +715,11 @@ button {
 
 .buy-hint {
   color: var(--muted);
-  font-size: 0.85em;
+  font-size: 0.8em;
   text-align: center;
 }
 
 .debt-hint {
-  color: #ff8a1f;
-}
-
-.game-status {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 2px 10px;
-  color: var(--muted);
-  font-size: 0.8em;
-}
-
-.inflation {
   color: #ff8a1f;
 }
 
@@ -478,63 +742,199 @@ button {
   }
 }
 
-/* ---------- side panel ---------- */
+/* ---------- players ---------- */
 
 .players {
-  list-style: none;
+  width: 100%;
   margin: 0;
   padding: 0;
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+  list-style: none;
 }
 
 .player {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'avatar name name'
+    'avatar money owned';
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-left-width: 4px;
-  border-radius: 8px;
-  background: var(--panel);
+  gap: 1px 7px;
+  padding: 5px 8px 5px 5px;
+  border: 1px solid color-mix(in srgb, var(--pc) 30%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--pc) 6%, var(--panel));
+  font-size: 0.8rem;
+  transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
 }
 
 .player.current {
-  box-shadow: 0 0 12px rgb(62 230 255 / 35%);
-  background: #251848;
+  border-color: var(--pc);
+  background: color-mix(in srgb, var(--pc) 16%, var(--panel));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--pc) 45%, transparent);
 }
 
 .player.bankrupt {
-  opacity: 0.45;
+  opacity: 0.4;
+}
+
+.player.bankrupt .player-name {
   text-decoration: line-through;
 }
 
+.avatar {
+  grid-area: avatar;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--pc) 55%, #fff), var(--pc) 60%);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--pc) 70%, transparent);
+  color: #0b0716;
+  font-weight: 800;
+}
+
+.avatar.isolated {
+  outline: 2px solid #ff2e5b;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 22%, rgb(11 7 22 / 70%) 22% 34%),
+    var(--pc);
+}
+
 .player-name {
-  font-weight: 600;
+  grid-area: name;
   overflow: hidden;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.player-owned {
+.player-name .you {
   color: var(--muted);
-  font-size: 0.85em;
+  font-weight: 400;
 }
 
 .player-money {
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
+  grid-area: money;
   color: var(--accent-2);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.player-owned {
+  grid-area: owned;
+  display: flex;
+  gap: 6px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+/* низкий центр (телефон боком): всё мельче */
+@container center (max-height: 340px) {
+  .center-inner,
+  .center-main {
+    gap: 5px;
+  }
+
+  .player {
+    padding: 3px 6px 3px 3px;
+    font-size: 0.72rem;
+  }
+
+  .avatar {
+    width: 22px;
+    height: 22px;
+    font-size: 0.7rem;
+  }
+
+  .turn-label {
+    font-size: 0.9rem;
+  }
+
+  .die {
+    width: 32px;
+    height: 32px;
+    padding: 4px;
+    border-radius: 8px;
+  }
+
+  .die .pip {
+    width: 5px;
+    height: 5px;
+  }
+
+  .board-center .btn {
+    font-size: 0.78rem;
+    padding: 0.4em 0.8em;
+  }
+}
+
+/* большой центр (планшет, десктоп): крупнее кубики и шрифт */
+@container center (min-height: 560px) and (min-width: 560px) {
+  .center-inner {
+    gap: 14px;
+    padding: 16px;
+    font-size: 1rem;
+  }
+
+  .center-main {
+    gap: 14px;
+  }
+
+  .avatar {
+    width: 38px;
+    height: 38px;
+  }
+
+  .player {
+    font-size: 0.9rem;
+  }
+
+  .turn-label {
+    font-size: 1.3rem;
+  }
+
+  .die {
+    width: 60px;
+    height: 60px;
+    padding: 9px;
+  }
+
+  .die .pip {
+    width: 10px;
+    height: 10px;
+  }
 }
 
 /* ---------- log ---------- */
 
 .log-panel {
+  flex: 1 1 0;
+  min-height: 6em;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-height: 0;
+}
+
+.log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.log-head .icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
 }
 
 /* фильтры листаются по горизонтали внутри себя, страница не скроллится */
@@ -578,24 +978,26 @@ button {
 
 .log-wrap {
   position: relative;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  min-height: 0;
 }
 
 .log {
+  flex: 1;
+  min-height: 0;
   margin: 0;
-  padding: 8px 10px;
-  list-style: none;
-  height: 200px;
+  padding: 6px 8px;
   overflow-y: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--line);
-  border-left-width: 1px;
-  border-radius: 8px;
-  background: var(--bg-2);
-  font-size: 0.82rem;
+  border-radius: 10px;
+  background: rgb(20 13 38 / 70%);
   color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  list-style: none;
 }
 
 .log li {
@@ -633,29 +1035,6 @@ button {
 
 .log-new:active {
   transform: translateX(-50%) scale(0.96);
-}
-
-.side-footer {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.side-footer .build-info {
-  margin-left: auto;
-}
-
-@media (min-width: 900px) {
-  .log-panel,
-  .log-wrap {
-    flex: 1;
-  }
-
-  .log {
-    flex: 1;
-    height: auto;
-    min-height: 0;
-  }
 }
 
 /* ---------- modals ---------- */
@@ -998,7 +1377,8 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   .dice.rolling .die,
-  .token.hop {
+  .token.hop,
+  .cell.active::before {
     animation: none;
   }
 }
@@ -1114,24 +1494,13 @@ button {
     --pad: 6px;
   }
 
-  .board-center {
-    gap: 2cqi;
-    padding: 1.5cqi;
-  }
-
   .board-center .btn {
-    font-size: 0.78rem;
-    padding: 0.4em 0.7em;
+    font-size: 0.8rem;
+    padding: 0.45em 0.8em;
   }
 
   .board-center .actions {
     gap: 5px;
-  }
-
-  .player {
-    gap: 6px;
-    padding: 6px 8px;
-    font-size: 0.9rem;
   }
 
   .summary-stats {
@@ -1147,45 +1516,7 @@ button {
   }
 }
 
-/* центр доски не раздвигает клетки, если кнопок много: прокручивается сам */
-.board-center {
-  justify-content: safe center;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden auto;
-}
-
-/* телефон боком: доска по высоте экрана слева, панель справа со своей прокруткой */
-@media (orientation: landscape) and (max-height: 600px) and (max-width: 899px) {
-  .game {
-    grid-template-columns: auto minmax(0, 1fr);
-    height: 100dvh;
-    padding-left: max(var(--pad), env(safe-area-inset-left));
-    padding-right: max(var(--pad), env(safe-area-inset-right));
-  }
-
-  .board-wrap {
-    align-items: center;
-    min-height: 0;
-  }
-
-  .board {
-    width: calc(100dvh - 2 * var(--pad) - var(--safe-top) - var(--safe-bottom));
-  }
-
-  .side {
-    min-width: 0;
-    overflow-y: auto;
-  }
-
-  .side > * {
-    flex: none;
-  }
-
-  .log {
-    height: 140px;
-  }
-
+@media (orientation: landscape) and (max-height: 600px) {
   .start-screen {
     gap: 12px;
   }

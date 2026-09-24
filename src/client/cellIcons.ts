@@ -1,0 +1,82 @@
+import {
+  Anchor,
+  Atom,
+  BadgePercent,
+  BrainCircuit,
+  Briefcase,
+  Building2,
+  Cable,
+  ChevronsLeft,
+  Coins,
+  Cpu,
+  Crown,
+  Database,
+  Dna,
+  Drone,
+  Gamepad2,
+  Gem,
+  Joystick,
+  Lock,
+  Network,
+  Package,
+  Rocket,
+  Server,
+  ShieldCheck,
+  ShoppingBag,
+  Siren,
+  Soup,
+  Sparkles,
+  SquareTerminal,
+  Sprout,
+  Store,
+  Syringe,
+  TramFront,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react';
+import type { Cell } from '../shared/game/types';
+
+/** Иконка по виду клетки: у всех «Сетей», «Взломов» и станций она общая. */
+const KIND_ICONS: Record<Exclude<Cell['kind'], 'district'>, LucideIcon> = {
+  start: ChevronsLeft,
+  transit: TramFront,
+  utility: Zap,
+  tax: BadgePercent,
+  hack: SquareTerminal,
+  net: Network,
+  isolation: Lock,
+  goToIsolation: Siren,
+  neutral: Coins,
+};
+
+/** Свои иконки районов и тех клеток, что отличаются от общей иконки вида. */
+const INDEX_ICONS: Record<number, LucideIcon> = {
+  1: Anchor,
+  3: Cable,
+  6: Store,
+  8: Soup,
+  9: Gamepad2,
+  11: Sparkles,
+  13: Drone,
+  14: Joystick,
+  16: Package,
+  18: ShoppingBag,
+  19: Database,
+  21: Building2,
+  23: Cpu,
+  24: BrainCircuit,
+  26: Dna,
+  27: Atom,
+  28: Server,
+  29: Syringe,
+  31: Briefcase,
+  32: Sprout,
+  34: ShieldCheck,
+  37: Rocket,
+  38: Gem,
+  39: Crown,
+};
+
+export function cellIcon(cell: Cell): LucideIcon {
+  return INDEX_ICONS[cell.index] ?? (cell.kind === 'district' ? Building2 : KIND_ICONS[cell.kind]);
+}

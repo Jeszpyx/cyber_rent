@@ -1,3 +1,4 @@
+import { Menu, Volume2, VolumeX } from 'lucide-react';
 import { useState, useSyncExternalStore } from 'react';
 import { BAIL, BOARD, ISOLATION_ATTEMPTS } from '../../shared/game/board';
 import { CARD_BY_ID } from '../../shared/game/cards';
@@ -9,7 +10,6 @@ import { useGame, type GameInit, type GameSession } from '../hooks/useGame';
 import { useBackButton, useMainButton, type MainButtonConfig } from '../hooks/useTelegramButtons';
 import { AuctionModal } from './AuctionModal';
 import { Board } from './Board';
-import { BuildInfo } from './BuildInfo';
 import { CellCard } from './CellCard';
 import { Dice } from './Dice';
 import { DrawnCard } from './DrawnCard';
@@ -116,10 +116,10 @@ export function GameScreen({ session, onExit, exitTitle, roomCode, notice }: Scr
 
   return (
     <div className="game">
-      <Board state={state} shown={animation.shown} onCellClick={setSelectedCell}>
-        <div className="turn-label" style={{ color: player.color }}>
-          {state.phase === 'gameOver' ? 'Игра окончена' : `Ход: ${player.name}`}
-        </div>
+      <header className="topbar">
+        <button className="btn small topbar-menu" onClick={onExit} title={exitTitle}>
+          <Menu aria-hidden size={16} /> Меню
+        </button>
         <div className="game-status">
           <span title={mode.description}>{mode.name}</span>
           <span>
@@ -129,114 +129,116 @@ export function GameScreen({ session, onExit, exitTitle, roomCode, notice }: Scr
           <span title="Копилка Нейтральной зоны: налоги и штрафы, забирает попавший на клетку">☯ {state.pot}₵</span>
           {multiplier > 1 && <span className="inflation">рента ×{multiplier}</span>}
           {roomCode && <span title="Код онлайн-комнаты">⌘ {roomCode}</span>}
-          {humanTurn && deadline !== null && <TurnTimer key={deadline} deadline={deadline} />}
         </div>
-        <Dice dice={state.dice} rolling={animation.rolling} />
-        <div className="actions">
-          {humanTurn && state.phase === 'roll' && (
-            <button className="btn primary" onClick={() => dispatch({ type: 'ROLL' })}>
-              Бросить кубики
-            </button>
-          )}
-          {humanTurn && state.phase === 'isolation' && player.isolation && (
-            <>
-              <button className="btn primary" onClick={() => dispatch({ type: 'ROLL' })}>
-                Бросок на дубль {ISOLATION_ATTEMPTS - player.isolation.turnsLeft + 1}/{ISOLATION_ATTEMPTS}
-              </button>
-              <button
-                className="btn"
-                disabled={player.money < BAIL}
-                onClick={() => dispatch({ type: 'PAY_BAIL' })}
-              >
-                Залог {BAIL}₵
-              </button>
-              {player.releaseCards.length > 0 && (
-                <button className="btn" onClick={() => dispatch({ type: 'USE_RELEASE_CARD' })}>
-                  🔓 Карточка
-                </button>
-              )}
-            </>
-          )}
-          {humanTurn && buyCell && (
-            <>
-              <button className="btn primary" onClick={() => dispatch({ type: 'BUY' })}>
-                Купить за {buyCell.price}₵
-              </button>
-              <button className="btn" onClick={() => dispatch({ type: 'START_AUCTION' })}>
-                На торги
-              </button>
-            </>
-          )}
-          {humanTurn && state.phase === 'end' && (
-            <button className="btn primary" onClick={() => dispatch({ type: 'END_TURN' })}>
-              Завершить ход
-            </button>
-          )}
-          {humanTurn && debt && (
-            <>
-              <button
-                className="btn primary"
-                disabled={actor.money < debt.amount}
-                onClick={() => dispatch({ type: 'PAY_DEBT' })}
-              >
-                Заплатить {debt.amount}₵
-              </button>
-              <button className="btn" onClick={() => dispatch({ type: 'DECLARE_BANKRUPTCY' })}>
-                Сдаться
-              </button>
-            </>
-          )}
-          {canTrade && (
-            <button className="btn" onClick={() => setTradeOpen(true)}>
-              ⇄ Обмен
-            </button>
-          )}
-          {waiting && state.phase !== 'gameOver' && !animation.busy && (
-            <span className="thinking">{actor.isBot ? 'бот думает…' : `решает ${actor.name}…`}</span>
-          )}
-          {takenOver && (
-            <button className="btn" onClick={() => dispatch({ type: 'TAKE_CONTROL', playerId: me.id })}>
-              Вернуть управление
-            </button>
-          )}
-          {finished && summaryClosed && (
-            <button className="btn primary" onClick={() => setSummaryClosed(false)}>
-              Итоги партии
-            </button>
-          )}
-        </div>
-        {buyCell && humanTurn && <div className="buy-hint">«{buyCell.name}» свободен. Откажетесь — клетка уйдёт на торги.</div>}
-        {state.phase === 'isolation' && humanTurn && (
-          <div className="buy-hint">Изолятор: дубль — свобода, после {ISOLATION_ATTEMPTS}-й неудачи — залог.</div>
-        )}
-        {debt && humanTurn && (
-          <div className="buy-hint debt-hint">
-            Долг {debt.amount}₵ {creditor ? `игроку ${creditor.name}` : 'банку'}, наличных {actor.money}₵. Нажмите на свою
-            клетку, чтобы продать постройки или заложить её.
-          </div>
-        )}
-        {canDevelop && <div className="buy-hint">Квартал ваш целиком — нажмите на район, чтобы строить.</div>}
-        {takenOver && <div className="buy-hint">Вы долго молчали, и за вас играет бот.</div>}
-      </Board>
+        <button
+          className="icon-btn"
+          onClick={() => setSoundEnabled(!sound)}
+          aria-pressed={sound}
+          aria-label={sound ? 'Выключить звук и вибрацию' : 'Включить звук и вибрацию'}
+          title={sound ? 'Выключить звук и вибрацию' : 'Включить звук и вибрацию'}
+        >
+          {sound ? <Volume2 aria-hidden size={18} /> : <VolumeX aria-hidden size={18} />}
+        </button>
+      </header>
 
-      <aside className="side">
-        <PlayerPanel state={state} you={roomCode ? localId : null} />
-        <LogPanel state={state} />
-        <div className="side-footer">
-          <button className="btn small" onClick={onExit} title={exitTitle}>
-            В меню
-          </button>
-          <button
-            className="btn small"
-            onClick={() => setSoundEnabled(!sound)}
-            aria-pressed={sound}
-            title={sound ? 'Выключить звук и вибрацию' : 'Включить звук и вибрацию'}
-          >
-            {sound ? '🔊' : '🔇'}
-          </button>
-          <BuildInfo />
+      <Board state={state} shown={animation.shown} onCellClick={setSelectedCell}>
+        <div className="center-main">
+          <PlayerPanel state={state} you={roomCode ? localId : null} />
+          <div className="turn-row">
+            <span className="turn-label" style={{ color: player.color }}>
+              {state.phase === 'gameOver'
+                ? 'Игра окончена'
+                : player.id === localId && !player.isBot
+                  ? 'Ваш ход'
+                  : `Ход: ${player.name}`}
+            </span>
+            {humanTurn && deadline !== null && <TurnTimer key={deadline} deadline={deadline} />}
+          </div>
+          <Dice dice={state.dice} rolling={animation.rolling} />
+          <div className="actions">
+            {humanTurn && state.phase === 'roll' && (
+              <button className="btn primary" onClick={() => dispatch({ type: 'ROLL' })}>
+                Бросить кубики
+              </button>
+            )}
+            {humanTurn && state.phase === 'isolation' && player.isolation && (
+              <>
+                <button className="btn primary" onClick={() => dispatch({ type: 'ROLL' })}>
+                  Бросок на дубль {ISOLATION_ATTEMPTS - player.isolation.turnsLeft + 1}/{ISOLATION_ATTEMPTS}
+                </button>
+                <button className="btn" disabled={player.money < BAIL} onClick={() => dispatch({ type: 'PAY_BAIL' })}>
+                  Залог {BAIL}₵
+                </button>
+                {player.releaseCards.length > 0 && (
+                  <button className="btn" onClick={() => dispatch({ type: 'USE_RELEASE_CARD' })}>
+                    🔓 Карточка
+                  </button>
+                )}
+              </>
+            )}
+            {humanTurn && buyCell && (
+              <>
+                <button className="btn primary" onClick={() => dispatch({ type: 'BUY' })}>
+                  Купить за {buyCell.price}₵
+                </button>
+                <button className="btn" onClick={() => dispatch({ type: 'START_AUCTION' })}>
+                  На торги
+                </button>
+              </>
+            )}
+            {humanTurn && state.phase === 'end' && (
+              <button className="btn primary" onClick={() => dispatch({ type: 'END_TURN' })}>
+                Завершить ход
+              </button>
+            )}
+            {humanTurn && debt && (
+              <>
+                <button
+                  className="btn primary"
+                  disabled={actor.money < debt.amount}
+                  onClick={() => dispatch({ type: 'PAY_DEBT' })}
+                >
+                  Заплатить {debt.amount}₵
+                </button>
+                <button className="btn" onClick={() => dispatch({ type: 'DECLARE_BANKRUPTCY' })}>
+                  Сдаться
+                </button>
+              </>
+            )}
+            {canTrade && (
+              <button className="btn" onClick={() => setTradeOpen(true)}>
+                ⇄ Обмен
+              </button>
+            )}
+            {waiting && state.phase !== 'gameOver' && !animation.busy && (
+              <span className="thinking">{actor.isBot ? 'бот думает…' : `решает ${actor.name}…`}</span>
+            )}
+            {takenOver && (
+              <button className="btn" onClick={() => dispatch({ type: 'TAKE_CONTROL', playerId: me.id })}>
+                Вернуть управление
+              </button>
+            )}
+            {finished && summaryClosed && (
+              <button className="btn primary" onClick={() => setSummaryClosed(false)}>
+                Итоги партии
+              </button>
+            )}
+          </div>
+          {buyCell && humanTurn && <div className="buy-hint">«{buyCell.name}» свободен. Откажетесь — клетка уйдёт на торги.</div>}
+          {state.phase === 'isolation' && humanTurn && (
+            <div className="buy-hint">Изолятор: дубль — свобода, после {ISOLATION_ATTEMPTS}-й неудачи — залог.</div>
+          )}
+          {debt && humanTurn && (
+            <div className="buy-hint debt-hint">
+              Долг {debt.amount}₵ {creditor ? `игроку ${creditor.name}` : 'банку'}, наличных {actor.money}₵. Нажмите на свою
+              клетку, чтобы продать постройки или заложить её.
+            </div>
+          )}
+          {canDevelop && <div className="buy-hint">Квартал ваш целиком — нажмите на район, чтобы строить.</div>}
+          {takenOver && <div className="buy-hint">Вы долго молчали, и за вас играет бот.</div>}
         </div>
-      </aside>
+        <LogPanel state={state} />
+      </Board>
 
       {selectedCell !== null && (
         <CellCard
@@ -279,11 +281,7 @@ export function GameScreen({ session, onExit, exitTitle, roomCode, notice }: Scr
       )}
 
       {drawnCard && (
-        <DrawnCard
-          card={drawnCard}
-          player={player}
-          onApply={humanTurn ? () => dispatch({ type: 'APPLY_CARD' }) : undefined}
-        />
+        <DrawnCard card={drawnCard} player={player} onApply={humanTurn ? () => dispatch({ type: 'APPLY_CARD' }) : undefined} />
       )}
 
       {showSummary && <GameSummary state={state} onNewGame={onExit} onClose={() => setSummaryClosed(true)} />}
