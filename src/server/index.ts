@@ -9,7 +9,12 @@ const clientDir = path.join(__dirname, '../client');
 const indexHtml = path.join(clientDir, 'index.html');
 const startedAt = new Date().toISOString();
 
-// Секреты и настройки — только из переменных окружения (панель хостинга), в репозиторий не попадают.
+// Настройки — из переменных окружения; .env в корне репозитория (тестовые креды) их не перекрывает.
+try {
+  process.loadEnvFile(path.join(__dirname, '../../.env'));
+} catch {
+  // .env нет — работаем только с переменными окружения
+}
 const { DATABASE_URL, BOT_TOKEN, BOT_USERNAME, APP_SHORT_NAME } = process.env;
 const rooms = new RoomService(createStore(DATABASE_URL));
 
