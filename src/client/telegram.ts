@@ -1,8 +1,36 @@
+interface BottomButton {
+  onClick(callback: () => void): BottomButton;
+  offClick(callback: () => void): BottomButton;
+  hide(): BottomButton;
+  setParams(params: { text?: string; color?: string; text_color?: string; is_active?: boolean; is_visible?: boolean }): BottomButton;
+}
+
+interface BackButton {
+  onClick(callback: () => void): BackButton;
+  offClick(callback: () => void): BackButton;
+  show(): BackButton;
+  hide(): BackButton;
+}
+
+export type HapticKind =
+  | { type: 'impact'; style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft' }
+  | { type: 'notification'; style: 'error' | 'success' | 'warning' }
+  | { type: 'selection' };
+
+interface HapticFeedback {
+  impactOccurred(style: string): void;
+  notificationOccurred(type: string): void;
+  selectionChanged(): void;
+}
+
 interface TelegramWebApp {
   initData: string;
   version: string;
   platform: string;
   initDataUnsafe: { user?: { first_name?: string; username?: string } };
+  MainButton: BottomButton;
+  BackButton?: BackButton;
+  HapticFeedback?: HapticFeedback;
   ready(): void;
   expand(): void;
   isVersionAtLeast(version: string): boolean;
@@ -44,4 +72,25 @@ export function isInTelegram(): boolean {
 
 export function telegramUserName(): string | null {
   return getWebApp()?.initDataUnsafe.user?.first_name ?? null;
+}
+
+/** Нижняя главная кнопка Telegram; вне Telegram — null. */
+export function telegramMainButton(): BottomButton | null {
+  return getWebApp()?.MainButton ?? null;
+}
+
+/** Кнопка «назад» в шапке Mini App (Bot API 6.1+); вне Telegram — null. */
+export function telegramBackButton(): BackButton | null {
+  const webApp = getWebApp();
+  return webApp?.isVersionAtLeast('6.1') ? (webApp.BackButton ?? null) : null;
+}
+
+/** Вибрация через Telegram (Bot API 6.1+); вне Telegram ничего не делает. */
+export function haptic(kind: HapticKind): void {
+  const webApp = getWebApp();
+  const feedback = webApp?.isVersionAtLeast('6.1') ? webApp.HapticFeedback : undefined;
+  if (!feedback) return;
+  if (kind.type === 'impact') feedback.impactOccurred(kind.style);
+  else if (kind.type === 'notification') feedback.notificationOccurred(kind.style);
+  else feedback.selectionChanged();
 }

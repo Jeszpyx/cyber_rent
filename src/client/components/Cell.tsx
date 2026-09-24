@@ -22,6 +22,8 @@ interface Props {
   level: number;
   mortgaged: boolean;
   tokens: Player[];
+  /** id фишек, которые сейчас шагают по полю: у них анимация «прыжка» */
+  moving: string[];
   onClick: () => void;
 }
 
@@ -30,7 +32,7 @@ function buildingsTitle(level: number): string {
   return `модулей: ${level}`;
 }
 
-export function Cell({ cell, row, col, ownerColor, level, mortgaged, tokens, onClick }: Props) {
+export function Cell({ cell, row, col, ownerColor, level, mortgaged, tokens, moving, onClick }: Props) {
   const stripe = cell.kind === 'district' ? GROUP_COLORS[cell.group] : undefined;
   const title = [cell.name, level > 0 && buildingsTitle(level), mortgaged && 'в залоге'].filter(Boolean).join(' · ');
   return (
@@ -58,7 +60,7 @@ export function Cell({ cell, row, col, ownerColor, level, mortgaged, tokens, onC
           {tokens.map((p) => (
             <span
               key={p.id}
-              className={p.isolation ? 'token isolated' : 'token'}
+              className={['token', p.isolation && 'isolated', moving.includes(p.id) && 'hop'].filter(Boolean).join(' ')}
               style={{ background: p.color }}
               title={p.isolation ? `${p.name} в Изоляторе` : p.name}
             />

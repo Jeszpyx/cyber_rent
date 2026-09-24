@@ -1,51 +1,101 @@
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { BAIL, BOARD, ISOLATION_ATTEMPTS } from '../../shared/game/board';
 import { CARD_BY_ID } from '../../shared/game/cards';
 import { canBuild, gameMode, ownedCells, rentMultiplier } from '../../shared/game/economy';
-import { actingPlayer, currentPlayer, standings, type NewGameOptions } from '../../shared/game/engine';
-import type { OwnableCell } from '../../shared/game/types';
-import { useGame } from '../hooks/useGame';
+import { actingPlayer, currentPlayer } from '../../shared/game/engine';
+import type { Action, GameState, OwnableCell, Player } from '../../shared/game/types';
+import { setSoundEnabled, soundEnabled, subscribeSound } from '../feedback';
+import { useGame, type GameInit } from '../hooks/useGame';
+import { useBackButton, useMainButton, type MainButtonConfig } from '../hooks/useTelegramButtons';
 import { AuctionModal } from './AuctionModal';
 import { Board } from './Board';
 import { BuildInfo } from './BuildInfo';
 import { CellCard } from './CellCard';
 import { Dice } from './Dice';
 import { DrawnCard } from './DrawnCard';
+import { GameSummary } from './GameSummary';
+import { LogPanel } from './LogPanel';
 import { PlayerPanel } from './PlayerPanel';
 import { TradeDialog } from './TradeDialog';
 import { TradeProposal } from './TradeProposal';
 import { TurnTimer } from './TurnTimer';
 
-interface Props {
-  options: NewGameOptions;
-  onRestart: () => void;
+/**
+ * Главное действие хода человека — его дублирует нижняя кнопка Telegram (MainButton).
+ * Торги и ответ на обмен туда не выносятся: там несколько равноправных вариантов.
+ */
+function mainAction(state: GameState, actor: Player): (Omit<MainButtonConfig, 'onClick'> & { action: Action }) | null {
+  switch (state.phase) {
+    case 'roll':
+      return { text: 'Бросить кубики', action: { type: 'ROLL' } };
+    case 'isolation':
+      return { text: 'Бросок на дубль', action: { type: 'ROLL' } };
+    case 'buyDecision':
+      return { text: `Купить за ${(BOARD[actor.position] as OwnableCell).price}₵`, action: { type: 'BUY' } };
+    case 'card':
+      return { text: 'ОК', action: { type: 'APPLY_CARD' } };
+    case 'debt':
+      return { text: `Заплатить ${state.debt!.amount}₵`, action: { type: 'PAY_DEBT' }, disabled: actor.money < state.debt!.amount };
+    case 'end':
+      return { text: 'Завершить ход', action: { type: 'END_TURN' } };
+    default:
+      return null;
+  }
 }
 
-export function Game({ options, onRestart }: Props) {
-  const { state, dispatch, deadline } = useGame(options);
+interface Props {
+  init: GameInit;
+  /** выйти в меню; идущая партия остаётся в сохранении */
+  onExit: () => void;
+}
+
+export function Game({ init, onExit }: Props) {
+  const { state, dispatch, deadline, animation } = useGame(init);
   const [selectedCell, setSelectedCell] = useState<number | null>(null);
   const [tradeOpen, setTradeOpen] = useState(false);
+  const [summaryClosed, setSummaryClosed] = useState(false);
+  const sound = useSyncExternalStore(subscribeSound, soundEnabled);
 
   const player = currentPlayer(state);
   // Решает должник в фазе 'debt', иначе — тот, чей ход.
   const actor = actingPlayer(state);
-  const humanTurn = !actor.isBot && state.phase !== 'gameOver';
+  // Пока фишка идёт, решения человеку не показываем: сначала пусть дойдёт.
+  const humanTurn = !actor.isBot && state.phase !== 'gameOver' && !animation.busy;
   const debt = state.phase === 'debt' ? state.debt : null;
   const creditor = debt?.to ? state.players.find((p) => p.id === debt.to) : null;
   const canDevelop = humanTurn && ownedCells(state, actor.id).some((i) => canBuild(state, i));
   // Обмен предлагают в свой ход там же, где строят: до броска, в Изоляторе и в конце хода.
   const canTrade = humanTurn && (state.phase === 'roll' || state.phase === 'isolation' || state.phase === 'end');
-  const winner = state.players.find((p) => p.id === state.winnerId);
   const buyCell = state.phase === 'buyDecision' ? (BOARD[player.position] as OwnableCell) : null;
   const mode = gameMode(state);
   const multiplier = rentMultiplier(state);
-  // Победа по лимиту кругов: к концу партии в игре осталось больше одного игрока.
-  const finalStandings = winner && state.players.filter((p) => !p.bankrupt).length > 1 ? standings(state) : null;
-  const drawnCard =state.phase === 'card' && state.pendingCard ? CARD_BY_ID[state.pendingCard] : null;
+  const drawnCard = state.phase === 'card' && state.pendingCard && !animation.busy ? CARD_BY_ID[state.pendingCard] : null;
+  const finished = state.phase === 'gameOver' && !animation.busy;
+  const showSummary = finished && !summaryClosed;
+
+  // Кнопки Telegram: «назад» закрывает модалки, которые можно закрыть; главная дублирует действие хода.
+  const closeModal = tradeOpen && canTrade
+    ? () => setTradeOpen(false)
+    : selectedCell !== null
+      ? () => setSelectedCell(null)
+      : showSummary
+        ? () => setSummaryClosed(true)
+        : null;
+  const main = humanTurn && !closeModal ? mainAction(state, actor) : null;
+  useBackButton(closeModal);
+  useMainButton(
+    main
+      ? { text: main.text, disabled: main.disabled, onClick: () => dispatch(main.action) }
+      : showSummary
+        ? { text: 'Новая игра', onClick: onExit }
+        : finished && !closeModal
+          ? { text: 'Итоги партии', onClick: () => setSummaryClosed(false) }
+          : null,
+  );
 
   return (
     <div className="game">
-      <Board state={state} onCellClick={setSelectedCell}>
+      <Board state={state} shown={animation.shown} onCellClick={setSelectedCell}>
         <div className="turn-label" style={{ color: player.color }}>
           {state.phase === 'gameOver' ? 'Игра окончена' : `Ход: ${player.name}`}
         </div>
@@ -59,7 +109,7 @@ export function Game({ options, onRestart }: Props) {
           {multiplier > 1 && <span className="inflation">рента ×{multiplier}</span>}
           {humanTurn && deadline !== null && <TurnTimer key={deadline} deadline={deadline} />}
         </div>
-        <Dice dice={state.dice} />
+        <Dice dice={state.dice} rolling={animation.rolling} />
         <div className="actions">
           {humanTurn && state.phase === 'roll' && (
             <button className="btn primary" onClick={() => dispatch({ type: 'ROLL' })}>
@@ -119,7 +169,12 @@ export function Game({ options, onRestart }: Props) {
               ⇄ Обмен
             </button>
           )}
-          {!humanTurn && state.phase !== 'gameOver' && <span className="thinking">бот думает…</span>}
+          {actor.isBot && state.phase !== 'gameOver' && !animation.busy && <span className="thinking">бот думает…</span>}
+          {finished && summaryClosed && (
+            <button className="btn primary" onClick={() => setSummaryClosed(false)}>
+              Итоги партии
+            </button>
+          )}
         </div>
         {buyCell && humanTurn && <div className="buy-hint">«{buyCell.name}» свободен. Откажетесь — клетка уйдёт на торги.</div>}
         {state.phase === 'isolation' && humanTurn && (
@@ -136,17 +191,18 @@ export function Game({ options, onRestart }: Props) {
 
       <aside className="side">
         <PlayerPanel state={state} />
-        <ol className="log" reversed>
-          {state.log
-            .slice()
-            .reverse()
-            .map((entry) => (
-              <li key={entry.id}>{entry.text}</li>
-            ))}
-        </ol>
+        <LogPanel state={state} />
         <div className="side-footer">
-          <button className="btn small" onClick={onRestart}>
-            Новая игра
+          <button className="btn small" onClick={onExit} title="Партия сохранится — её можно продолжить из меню">
+            В меню
+          </button>
+          <button
+            className="btn small"
+            onClick={() => setSoundEnabled(!sound)}
+            aria-pressed={sound}
+            title={sound ? 'Выключить звук и вибрацию' : 'Включить звук и вибрацию'}
+          >
+            {sound ? '🔊' : '🔇'}
           </button>
           <BuildInfo />
         </div>
@@ -162,7 +218,7 @@ export function Game({ options, onRestart }: Props) {
         />
       )}
 
-      {state.auction && (
+      {state.auction && !animation.busy && (
         <AuctionModal
           state={state}
           auction={state.auction}
@@ -200,29 +256,7 @@ export function Game({ options, onRestart }: Props) {
         />
       )}
 
-      {winner && (
-        <div className="overlay">
-          <div className="modal">
-            <h2 style={{ color: winner.color }}>{winner.name} побеждает!</h2>
-            {finalStandings && (
-              <>
-                <p className="standings-title">Лимит кругов исчерпан. Капитал:</p>
-                <ol className="standings">
-                  {finalStandings.map(({ player: p, worth }) => (
-                    <li key={p.id}>
-                      <span style={{ color: p.color }}>{p.name}</span>
-                      <b>{worth}₵</b>
-                    </li>
-                  ))}
-                </ol>
-              </>
-            )}
-            <button className="btn primary" onClick={onRestart}>
-              Новая игра
-            </button>
-          </div>
-        </div>
-      )}
+      {showSummary && <GameSummary state={state} onNewGame={onExit} onClose={() => setSummaryClosed(true)} />}
     </div>
   );
 }

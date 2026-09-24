@@ -13,18 +13,20 @@ function gridPosition(index: number): [number, number] {
 
 interface Props {
   state: GameState;
+  /** player id → клетка, где фишку показать вместо state.position (идёт анимация хода) */
+  shown: Record<string, number>;
   onCellClick: (index: number) => void;
   children: ReactNode;
 }
 
-export function Board({ state, onCellClick, children }: Props) {
+export function Board({ state, shown, onCellClick, children }: Props) {
   return (
     <div className="board-wrap">
       <div className="board">
         {BOARD.map((cell) => {
           const [row, col] = gridPosition(cell.index);
           const owner = state.players.find((p) => p.id === state.owners[cell.index]);
-          const tokens = state.players.filter((p) => !p.bankrupt && p.position === cell.index);
+          const tokens = state.players.filter((p) => !p.bankrupt && (shown[p.id] ?? p.position) === cell.index);
           return (
             <Cell
               key={cell.index}
@@ -35,6 +37,7 @@ export function Board({ state, onCellClick, children }: Props) {
               level={state.buildings[cell.index] ?? 0}
               mortgaged={Boolean(state.mortgaged[cell.index])}
               tokens={tokens}
+              moving={tokens.filter((p) => p.id in shown).map((p) => p.id)}
               onClick={() => onCellClick(cell.index)}
             />
           );

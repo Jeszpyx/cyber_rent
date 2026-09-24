@@ -2,18 +2,36 @@ import { useEffect, useReducer, useState } from 'react';
 import { decideBotAction } from '../../shared/game/bot';
 import { actingPlayer, applyAction, createGame, type NewGameOptions } from '../../shared/game/engine';
 import { MODES } from '../../shared/game/modes';
+import type { GameState } from '../../shared/game/types';
+import { saveGame } from '../gameStorage';
+import { useAnimation } from './useAnimation';
+import { useGameSounds } from './useGameSounds';
 
 const BOT_DELAY_MS = 650;
 /** Карточку бота держим дольше, чтобы человек успел прочитать. */
 const BOT_CARD_DELAY_MS = 2000;
 
-export function useGame(options: NewGameOptions) {
-  const [state, dispatch] = useReducer(applyAction, options, createGame);
+/** Новая партия или продолжение сохранённой. */
+export type GameInit = { options: NewGameOptions } | { state: GameState };
+
+function init(source: GameInit): GameState {
+  return 'state' in source ? source.state : createGame(source.options);
+}
+
+export function useGame(source: GameInit) {
+  const [state, dispatch] = useReducer(applyAction, source, init);
   /** Когда у живого игрока выйдет время на решение (ms); null — таймер не идёт. */
   const [deadline, setDeadline] = useState<number | null>(null);
+  // Человек всегда первый игрок (createGame); после таймаутов им может управлять бот.
+  const humanId = state.players[0].id;
+  const animation = useAnimation(state, humanId);
+  useGameSounds(state, animation.busy, humanId);
+
+  useEffect(() => saveGame(state), [state]);
 
   useEffect(() => {
-    if (state.phase === 'gameOver') {
+    // Пока фишка идёт, боты не ходят и время человека не тикает.
+    if (state.phase === 'gameOver' || animation.busy) {
       setDeadline(null);
       return;
     }
@@ -35,7 +53,7 @@ export function useGame(options: NewGameOptions) {
     setDeadline(Date.now() + seconds * 1000);
     const timer = setTimeout(() => dispatch({ type: 'TIMEOUT' }), seconds * 1000);
     return () => clearTimeout(timer);
-  }, [state]);
+  }, [state, animation.busy]);
 
-  return { state, dispatch, deadline };
+  return { state, dispatch, deadline, animation };
 }

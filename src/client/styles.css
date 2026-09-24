@@ -528,33 +528,132 @@ button {
   color: var(--accent-2);
 }
 
+/* ---------- log ---------- */
+
+.log-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+/* фильтры листаются по горизонтали внутри себя, страница не скроллится */
+.log-filters {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.log-filters::-webkit-scrollbar {
+  display: none;
+}
+
+.tag {
+  flex: none;
+  max-width: 9em;
+  padding: 3px 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag:not([style]) {
+  color: var(--muted);
+}
+
+.tag.active {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 8px rgb(62 230 255 / 40%);
+}
+
+.tag:not([style]).active {
+  color: var(--accent-2);
+}
+
+.log-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .log {
   margin: 0;
-  padding: 8px 10px 8px 2.2em;
-  max-height: 220px;
+  padding: 8px 10px;
+  list-style: none;
+  height: 200px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--line);
+  border-left-width: 1px;
   border-radius: 8px;
   background: var(--bg-2);
   font-size: 0.82rem;
   color: var(--muted);
 }
 
-.log li:first-child {
+.log li {
+  padding: 1px 0 1px 8px;
+  border-left: 2px solid transparent;
+}
+
+.log li + li {
+  margin-top: 2px;
+}
+
+.log li:last-child {
   color: var(--text);
+}
+
+.log .log-money {
+  border-left-color: #ffe14d;
+}
+
+.log .log-deal {
+  border-left-color: var(--accent);
+}
+
+.log .log-system {
+  border-left-color: var(--accent-2);
+}
+
+.log-new {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  box-shadow: 0 0 12px rgb(62 230 255 / 40%);
+}
+
+.log-new:active {
+  transform: translateX(-50%) scale(0.96);
 }
 
 .side-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
 }
 
+.side-footer .build-info {
+  margin-left: auto;
+}
+
 @media (min-width: 900px) {
+  .log-panel,
+  .log-wrap {
+    flex: 1;
+  }
+
   .log {
     flex: 1;
-    max-height: none;
+    height: auto;
     min-height: 0;
   }
 }
@@ -865,4 +964,229 @@ button {
 
 .trade-money small {
   color: var(--muted);
+}
+
+/* ---------- animation (F1) ---------- */
+
+.dice.rolling .die {
+  animation: shake 0.14s infinite alternate;
+}
+
+@keyframes shake {
+  from {
+    transform: rotate(-12deg) translateY(-4%);
+  }
+  to {
+    transform: rotate(12deg) translateY(4%);
+  }
+}
+
+/* фишка «подпрыгивает» на каждой клетке пути */
+.token.hop {
+  animation: hop 0.15s ease-out;
+  box-shadow: 0 0 10px #fff;
+}
+
+@keyframes hop {
+  from {
+    transform: translateY(-60%) scale(1.25);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dice.rolling .die,
+  .token.hop {
+    animation: none;
+  }
+}
+
+/* ---------- start screen: continue (F4) ---------- */
+
+.continue {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.continue small {
+  color: var(--muted);
+}
+
+/* ---------- game summary (F3) ---------- */
+
+.summary {
+  width: min(100%, 420px);
+  max-height: calc(100dvh - 32px);
+  overflow: hidden auto;
+  gap: 10px;
+}
+
+.summary-mode {
+  color: var(--muted);
+  letter-spacing: 0.05em;
+}
+
+.summary-reason {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.summary-list {
+  align-self: stretch;
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.summary-player {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 10px;
+  background: var(--bg-2);
+}
+
+.summary-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.summary-place {
+  flex: none;
+  min-width: 1.6em;
+}
+
+.summary-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-worth {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--accent-2);
+}
+
+.summary-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 12px;
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+}
+
+.summary-stats div {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.summary-stats dt {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-stats dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- narrow screens & landscape (F7) ---------- */
+
+@media (max-width: 400px) {
+  :root {
+    --pad: 6px;
+  }
+
+  .board-center {
+    gap: 2cqi;
+    padding: 1.5cqi;
+  }
+
+  .board-center .btn {
+    font-size: 0.78rem;
+    padding: 0.4em 0.7em;
+  }
+
+  .board-center .actions {
+    gap: 5px;
+  }
+
+  .player {
+    gap: 6px;
+    padding: 6px 8px;
+    font-size: 0.9rem;
+  }
+
+  .summary-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .overlay {
+    padding: 10px;
+  }
+
+  .modal {
+    padding: 16px 14px;
+  }
+}
+
+/* центр доски не раздвигает клетки, если кнопок много: прокручивается сам */
+.board-center {
+  justify-content: safe center;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden auto;
+}
+
+/* телефон боком: доска по высоте экрана слева, панель справа со своей прокруткой */
+@media (orientation: landscape) and (max-height: 600px) and (max-width: 899px) {
+  .game {
+    grid-template-columns: auto minmax(0, 1fr);
+    height: 100dvh;
+    padding-left: max(var(--pad), env(safe-area-inset-left));
+    padding-right: max(var(--pad), env(safe-area-inset-right));
+  }
+
+  .board-wrap {
+    align-items: center;
+    min-height: 0;
+  }
+
+  .board {
+    width: calc(100dvh - 2 * var(--pad) - var(--safe-top) - var(--safe-bottom));
+  }
+
+  .side {
+    min-width: 0;
+    overflow-y: auto;
+  }
+
+  .side > * {
+    flex: none;
+  }
+
+  .log {
+    height: 140px;
+  }
+
+  .start-screen {
+    gap: 12px;
+  }
 }

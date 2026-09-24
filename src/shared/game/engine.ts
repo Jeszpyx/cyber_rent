@@ -36,11 +36,25 @@ import {
 } from './economy';
 import { DEFAULT_MODE, MODES, type GameModeId } from './modes';
 import { rollDie, shuffle } from './rng';
-import type { Action, Card, CardDeck, Debt, GameState, OwnableCell, Payment, Player, TradeOffer } from './types';
+import type {
+  Action,
+  Card,
+  CardDeck,
+  Debt,
+  GameState,
+  LogKind,
+  OwnableCell,
+  Payment,
+  Player,
+  PlayerStats,
+  TradeOffer,
+} from './types';
 
 export { actingPlayer } from './economy';
 
-const LOG_LIMIT = 60;
+const LOG_LIMIT = 150;
+/** Столько последних перемещений хранится для анимации. */
+const MOVE_LIMIT = 8;
 const PLAYER_COLORS = ['#3ee6ff', '#ff2e9a', '#ffe14d', '#2eff8c'];
 const BOT_NAMES = ['Бот Глитч', 'Бот Неон', 'Бот Хэш'];
 
@@ -51,6 +65,10 @@ export interface NewGameOptions {
   mode?: GameModeId;
   /** ежедневный бонус (dailyBonus.ts) — прибавляется к стартовым деньгам человека */
   startBonus?: number;
+}
+
+function emptyStats(money: number): PlayerStats {
+  return { rentPaid: 0, rentReceived: 0, cellsBought: 0, auctionsWon: 0, trades: 0, built: 0, potCollected: 0, peakWorth: money, out: null };
 }
 
 export function createGame({ playerName, bots, seed, mode = DEFAULT_MODE, startBonus = 0 }: NewGameOptions): GameState {
@@ -94,12 +112,15 @@ export function createGame({ playerName, bots, seed, mode = DEFAULT_MODE, startB
     decks: { hack, net },
     pendingCard: null,
     seed: s2,
+    rollCount: 0,
+    moves: [],
+    stats: Object.fromEntries(players.map((p) => [p.id, emptyStats(p.money)])),
     log: [],
     logCounter: 0,
     winnerId: null,
   };
-  log(state, `Игра началась, режим «${MODES[mode].name}». Первым ходит ${players[0].name}.`);
-  if (startBonus > 0) log(state, `${players[0].name} получает ежедневный бонус ${startBonus}₵.`);
+  log(state, `Игра началась, режим «${MODES[mode].name}». Первым ходит ${players[0].name}.`, 'system');
+  if (startBonus > 0) log(state, `${players[0].name} получает ежедневный бонус ${startBonus}₵.`, 'money', players[0]);
   return state;
 }
 
@@ -108,12 +129,22 @@ export function currentPlayer(state: GameState): Player {
 }
 
 export function applyAction(prev: GameState, action: Action): GameState {
-  if (action.type === 'TIMEOUT') return timeout(prev);
+  if (action.type === 'TIMEOUT') return trackPeaks(timeout(prev));
   const next = reduce(prev, action);
+  if (next === prev) return prev;
   // Любое своё действие обнуляет счётчик таймаутов того, кто принимал решение.
-  const actorId = actingPlayer(prev).id;
-  if (next !== prev) playerById(next, actorId).idleStrikes = 0;
-  return next;
+  playerById(next, actingPlayer(prev).id).idleStrikes = 0;
+  return trackPeaks(next);
+}
+
+/** Обновляет пиковый капитал живых игроков для итогов партии. */
+function trackPeaks(state: GameState): GameState {
+  for (const player of state.players) {
+    if (player.bankrupt) continue;
+    const stats = state.stats[player.id];
+    stats.peakWorth = Math.max(stats.peakWorth, netWorth(state, player));
+  }
+  return state;
 }
 
 /**
@@ -128,10 +159,10 @@ function timeout(prev: GameState): GameState {
   const fine = Math.min(mode.idleFine, Math.max(player.money, 0));
   transfer(state, player, null, fine);
   player.idleStrikes += 1;
-  log(state, `${player.name} не успевает с решением${fine > 0 ? ` и платит штраф ${fine}₵ в Нейтральную зону` : ''}.`);
+  log(state, `${player.name} не успевает с решением${fine > 0 ? ` и платит штраф ${fine}₵ в Нейтральную зону` : ''}.`, 'money', player);
   if (!player.isBot && player.idleStrikes >= mode.idleStrikesLimit) {
     player.isBot = true;
-    log(state, `${player.name} слишком долго молчит — управление перехватывает бот.`);
+    log(state, `${player.name} слишком долго молчит — управление перехватывает бот.`, 'system', player);
   }
   const fallback = decideBotAction(state);
   return fallback ? reduce(state, fallback) : state;
@@ -156,7 +187,8 @@ function reduce(prev: GameState, action: Action): GameState {
       const cell = BOARD[player.position] as OwnableCell;
       player.money -= cell.price;
       state.owners[cell.index] = player.id;
-      log(state, `${player.name} покупает «${cell.name}» за ${cell.price}₵.`);
+      state.stats[player.id].cellsBought += 1;
+      log(state, `${player.name} покупает «${cell.name}» за ${cell.price}₵.`, 'deal', player);
       finishMove(state);
       return state;
     }
@@ -164,7 +196,7 @@ function reduce(prev: GameState, action: Action): GameState {
       if (prev.phase !== 'buyDecision') return prev;
       const state = structuredClone(prev);
       const player = currentPlayer(state);
-      log(state, `${player.name} отказывается от покупки «${BOARD[player.position].name}» — клетка уходит на торги.`);
+      log(state, `${player.name} отказывается от покупки «${BOARD[player.position].name}» — клетка уходит на торги.`, 'deal', player);
       startAuction(state);
       return state;
     }
@@ -176,7 +208,7 @@ function reduce(prev: GameState, action: Action): GameState {
       auction.bid = action.amount;
       auction.leaderId = bidder.id;
       auction.queue.push(auction.queue.shift()!);
-      log(state, `${bidder.name} ставит ${action.amount}₵.`);
+      log(state, `${bidder.name} ставит ${action.amount}₵.`, 'deal', bidder);
       advanceAuction(state);
       return state;
     }
@@ -185,7 +217,7 @@ function reduce(prev: GameState, action: Action): GameState {
       const state = structuredClone(prev);
       const player = actingPlayer(state);
       state.auction!.queue.shift();
-      log(state, `${player.name} пасует и выходит из торгов.`);
+      log(state, `${player.name} пасует и выходит из торгов.`, 'deal', player);
       advanceAuction(state);
       return state;
     }
@@ -198,7 +230,7 @@ function reduce(prev: GameState, action: Action): GameState {
       state.phase = 'trade';
       const from = playerById(state, trade.from);
       const to = playerById(state, trade.to);
-      log(state, `${from.name} предлагает обмен игроку ${to.name}: отдаёт ${offerText(trade.give)}, просит ${offerText(trade.take)}.`);
+      log(state, `${from.name} предлагает обмен игроку ${to.name}: отдаёт ${offerText(trade.give)}, просит ${offerText(trade.take)}.`, 'deal', from, to);
       return state;
     }
     case 'ACCEPT_TRADE': {
@@ -211,7 +243,9 @@ function reduce(prev: GameState, action: Action): GameState {
       handOver(state, to, from, trade.take);
       state.trade = null;
       state.phase = trade.resume;
-      log(state, `${to.name} принимает обмен с игроком ${from.name}.`);
+      state.stats[from.id].trades += 1;
+      state.stats[to.id].trades += 1;
+      log(state, `${to.name} принимает обмен с игроком ${from.name}.`, 'deal', to, from);
       return state;
     }
     case 'REJECT_TRADE': {
@@ -220,7 +254,9 @@ function reduce(prev: GameState, action: Action): GameState {
       const trade = state.trade!;
       state.trade = null;
       state.phase = trade.resume;
-      log(state, `${playerById(state, trade.to).name} отклоняет обмен с игроком ${playerById(state, trade.from).name}.`);
+      const from = playerById(state, trade.from);
+      const to = playerById(state, trade.to);
+      log(state, `${to.name} отклоняет обмен с игроком ${from.name}.`, 'deal', to, from);
       return state;
     }
     case 'APPLY_CARD': {
@@ -235,7 +271,7 @@ function reduce(prev: GameState, action: Action): GameState {
       if (prev.phase !== 'isolation' || currentPlayer(prev).money < BAIL) return prev;
       const state = structuredClone(prev);
       const player = currentPlayer(state);
-      log(state, `${player.name} платит залог ${BAIL}₵ и выходит из Изолятора.`);
+      log(state, `${player.name} платит залог ${BAIL}₵ и выходит из Изолятора.`, 'move', player);
       transfer(state, player, null, BAIL);
       release(state, player);
       return state;
@@ -246,7 +282,7 @@ function reduce(prev: GameState, action: Action): GameState {
       const player = currentPlayer(state);
       const id = player.releaseCards.shift()!;
       state.decks[CARD_BY_ID[id].deck].push(id);
-      log(state, `${player.name} использует карточку освобождения и выходит из Изолятора.`);
+      log(state, `${player.name} использует карточку освобождения и выходит из Изолятора.`, 'move', player);
       release(state, player);
       return state;
     }
@@ -258,8 +294,9 @@ function reduce(prev: GameState, action: Action): GameState {
       const level = buildingLevel(state, action.index) + 1;
       player.money -= cost;
       state.buildings[action.index] = level;
+      state.stats[player.id].built += 1;
       const what = level === TOWER_LEVEL ? 'небоскрёб' : `модуль ${level}`;
-      log(state, `${player.name} строит ${what} в «${BOARD[action.index].name}» за ${cost}₵.`);
+      log(state, `${player.name} строит ${what} в «${BOARD[action.index].name}» за ${cost}₵.`, 'deal', player);
       return state;
     }
     case 'SELL_BUILDING': {
@@ -270,7 +307,7 @@ function reduce(prev: GameState, action: Action): GameState {
       player.money += refund;
       if (level > 0) state.buildings[action.index] = level;
       else delete state.buildings[action.index];
-      log(state, `${player.name} продаёт постройку в «${BOARD[action.index].name}» банку за ${refund}₵.`);
+      log(state, `${player.name} продаёт постройку в «${BOARD[action.index].name}» банку за ${refund}₵.`, 'deal', player);
       return state;
     }
     case 'MORTGAGE': {
@@ -280,7 +317,7 @@ function reduce(prev: GameState, action: Action): GameState {
       const cell = BOARD[action.index] as OwnableCell;
       player.money += mortgageValue(cell);
       state.mortgaged[cell.index] = true;
-      log(state, `${player.name} закладывает «${cell.name}» и получает ${mortgageValue(cell)}₵.`);
+      log(state, `${player.name} закладывает «${cell.name}» и получает ${mortgageValue(cell)}₵.`, 'deal', player);
       return state;
     }
     case 'UNMORTGAGE': {
@@ -290,7 +327,7 @@ function reduce(prev: GameState, action: Action): GameState {
       const cell = BOARD[action.index] as OwnableCell;
       player.money -= unmortgageCost(cell);
       delete state.mortgaged[cell.index];
-      log(state, `${player.name} выкупает «${cell.name}» из залога за ${unmortgageCost(cell)}₵.`);
+      log(state, `${player.name} выкупает «${cell.name}» из залога за ${unmortgageCost(cell)}₵.`, 'deal', player);
       return state;
     }
     case 'PAY_DEBT': {
@@ -300,8 +337,8 @@ function reduce(prev: GameState, action: Action): GameState {
       state.debt = null;
       const from = playerById(state, debt.from);
       const to = debt.to === null ? null : playerById(state, debt.to);
-      transfer(state, from, to, debt.amount);
-      log(state, `${from.name} расплачивается: ${debt.amount}₵ ${to ? `игроку ${to.name}` : 'банку'}.`);
+      pay(state, debt, from, to);
+      log(state, `${from.name} расплачивается: ${debt.amount}₵ ${to ? `игроку ${to.name}` : 'банку'}.`, 'money', from, to);
       settle(state, debt.queue, debt.then);
       return state;
     }
@@ -332,7 +369,8 @@ export function resolveRoll(state: GameState, dice: [number, number]): void {
   const [d1, d2] = dice;
   state.dice = dice;
   state.rolledDouble = d1 === d2;
-  log(state, `${player.name} бросает ${d1} и ${d2}${state.rolledDouble ? ' — дубль!' : '.'}`);
+  state.rollCount += 1;
+  log(state, `${player.name} бросает ${d1} и ${d2}${state.rolledDouble ? ' — дубль!' : '.'}`, 'move', player);
   if (player.isolation) {
     rollInIsolation(state, player);
     return;
@@ -340,7 +378,7 @@ export function resolveRoll(state: GameState, dice: [number, number]): void {
   if (state.rolledDouble) {
     state.doublesInRow += 1;
     if (state.doublesInRow >= DOUBLES_TO_ISOLATION) {
-      log(state, `${DOUBLES_TO_ISOLATION} дубля подряд — дроны безопасности засекли ${player.name}.`);
+      log(state, `${DOUBLES_TO_ISOLATION} дубля подряд — дроны безопасности засекли ${player.name}.`, 'move', player);
       sendToIsolation(state, player);
       finishMove(state);
       return;
@@ -354,17 +392,17 @@ export function resolveRoll(state: GameState, dice: [number, number]): void {
 function rollInIsolation(state: GameState, player: Player): void {
   const isolation = player.isolation!;
   if (state.rolledDouble) {
-    log(state, `${player.name} выбрасывает дубль и выходит из Изолятора.`);
+    log(state, `${player.name} выбрасывает дубль и выходит из Изолятора.`, 'move', player);
     leaveIsolationAndMove(state);
     return;
   }
   isolation.turnsLeft -= 1;
   if (isolation.turnsLeft > 0) {
-    log(state, `Дубля нет — ${player.name} остаётся в Изоляторе. Попыток: ${isolation.turnsLeft}.`);
+    log(state, `Дубля нет — ${player.name} остаётся в Изоляторе. Попыток: ${isolation.turnsLeft}.`, 'move', player);
     finishMove(state);
     return;
   }
-  log(state, `Попытки кончились: ${player.name} платит залог ${BAIL}₵.`);
+  log(state, `Попытки кончились: ${player.name} платит залог ${BAIL}₵.`, 'move', player);
   settle(state, [{ from: player.id, to: null, amount: BAIL }], 'move');
 }
 
@@ -385,7 +423,7 @@ function leaveIsolationAndMove(state: GameState): void {
 function landOn(state: GameState): void {
   const player = currentPlayer(state);
   const cell = BOARD[player.position];
-  log(state, `${player.name} попадает на «${cell.name}».`);
+  log(state, `${player.name} попадает на «${cell.name}».`, 'move', player);
 
   if (isOwnable(cell)) {
     const ownerId = state.owners[cell.index];
@@ -394,20 +432,20 @@ function landOn(state: GameState): void {
         state.phase = 'buyDecision';
         return;
       }
-      log(state, `У ${player.name} не хватает денег на покупку — «${cell.name}» уходит на торги.`);
+      log(state, `У ${player.name} не хватает денег на покупку — «${cell.name}» уходит на торги.`, 'deal', player);
       startAuction(state);
       return;
     } else if (ownerId !== player.id && state.mortgaged[cell.index]) {
-      log(state, `«${cell.name}» в залоге — рента не берётся.`);
+      log(state, `«${cell.name}» в залоге — рента не берётся.`, 'money', player, playerById(state, ownerId));
     } else if (ownerId !== player.id) {
       const rent = calculateRent(state, cell, diceSum(state));
       const owner = playerById(state, ownerId);
-      log(state, `${player.name} платит ренту ${rent}₵ игроку ${owner.name}.`);
-      settle(state, [{ from: player.id, to: owner.id, amount: rent }], 'finish');
+      log(state, `${player.name} платит ренту ${rent}₵ игроку ${owner.name}.`, 'money', player, owner);
+      settle(state, [{ from: player.id, to: owner.id, amount: rent, rent: true }], 'finish');
       return;
     }
   } else if (cell.kind === 'tax') {
-    log(state, `${player.name} платит ${cell.amount}₵.`);
+    log(state, `${player.name} платит ${cell.amount}₵.`, 'money', player);
     settle(state, [{ from: player.id, to: null, amount: cell.amount }], 'finish');
     return;
   } else if (cell.kind === 'goToIsolation') {
@@ -448,19 +486,21 @@ function advanceAuction(state: GameState): void {
     const player = playerById(state, auction.queue[0]);
     if (player.money >= minBid(auction)) break;
     auction.queue.shift();
-    log(state, `${player.name} выбывает из торгов: не хватает наличных.`);
+    log(state, `${player.name} выбывает из торгов: не хватает наличных.`, 'deal', player);
   }
   const cell = BOARD[auction.index];
   if (auction.queue.length === 0) {
     state.auction = null;
-    log(state, `Никто не сделал ставку — «${cell.name}» остаётся у банка.`);
+    log(state, `Никто не сделал ставку — «${cell.name}» остаётся у банка.`, 'deal');
     finishMove(state);
   } else if (auction.queue.length === 1 && auction.queue[0] === auction.leaderId) {
     const winner = playerById(state, auction.leaderId);
     winner.money -= auction.bid;
     state.owners[auction.index] = winner.id;
     state.auction = null;
-    log(state, `${winner.name} выигрывает торги и получает «${cell.name}» за ${auction.bid}₵.`);
+    state.stats[winner.id].cellsBought += 1;
+    state.stats[winner.id].auctionsWon += 1;
+    log(state, `${winner.name} выигрывает торги и получает «${cell.name}» за ${auction.bid}₵.`, 'deal', winner);
     finishMove(state);
   }
 }
@@ -483,11 +523,12 @@ function handOver(state: GameState, from: Player, to: Player, offer: TradeOffer)
 
 function collectPot(state: GameState, player: Player): void {
   if (state.pot === 0) {
-    log(state, 'Копилка Нейтральной зоны пуста.');
+    log(state, 'Копилка Нейтральной зоны пуста.', 'money', player);
     return;
   }
-  log(state, `${player.name} забирает копилку Нейтральной зоны: ${state.pot}₵.`);
+  log(state, `${player.name} забирает копилку Нейтральной зоны: ${state.pot}₵.`, 'money', player);
   player.money += state.pot;
+  state.stats[player.id].potCollected += state.pot;
   state.pot = 0;
 }
 
@@ -495,7 +536,7 @@ function drawCard(state: GameState, deck: CardDeck): void {
   const player = currentPlayer(state);
   const id = state.decks[deck].shift();
   if (id === undefined) {
-    log(state, `Колода «${DECK_NAMES[deck]}» пуста.`);
+    log(state, `Колода «${DECK_NAMES[deck]}» пуста.`, 'move', player);
     finishMove(state);
     return;
   }
@@ -504,7 +545,7 @@ function drawCard(state: GameState, deck: CardDeck): void {
   if (card.effect.type !== 'getOutOfIsolation') state.decks[deck].push(id);
   state.pendingCard = id;
   state.phase = 'card';
-  log(state, `${player.name} тянет «${DECK_NAMES[deck]}»: ${card.text}`);
+  log(state, `${player.name} тянет «${DECK_NAMES[deck]}»: ${card.text}`, 'move', player);
 }
 
 function applyCard(state: GameState, card: Card): void {
@@ -520,6 +561,7 @@ function applyCard(state: GameState, card: Card): void {
       break;
     case 'moveTo':
       if (effect.index < player.position) paySalary(state, player);
+      recordMove(state, player, effect.index, (effect.index - player.position + BOARD.length) % BOARD.length);
       player.position = effect.index;
       landOn(state);
       return;
@@ -542,11 +584,11 @@ function applyCard(state: GameState, card: Card): void {
     }
     case 'getOutOfIsolation':
       player.releaseCards.push(card.id);
-      log(state, `${player.name} сохраняет карточку освобождения.`);
+      log(state, `${player.name} сохраняет карточку освобождения.`, 'move', player);
       break;
     case 'repairs': {
       const cost = repairsCost(state, player, effect.perModule, effect.perTower);
-      log(state, `${player.name} платит за ремонт ${cost}₵.`);
+      log(state, `${player.name} платит за ремонт ${cost}₵.`, 'money', player);
       settle(state, [{ from: player.id, to: null, amount: cost }], 'finish');
       return;
     }
@@ -594,21 +636,31 @@ function diceSum(state: GameState): number {
 function moveBy(state: GameState, player: Player, steps: number): void {
   const target = player.position + steps;
   if (target >= BOARD.length) paySalary(state, player);
-  player.position = ((target % BOARD.length) + BOARD.length) % BOARD.length;
+  const to = ((target % BOARD.length) + BOARD.length) % BOARD.length;
+  recordMove(state, player, to, steps);
+  player.position = to;
+}
+
+/** Запоминает перемещение фишки для анимации; steps: > 0 вперёд, < 0 назад, 0 — перенос. */
+function recordMove(state: GameState, player: Player, to: number, steps: number): void {
+  const id = (state.moves.at(-1)?.id ?? 0) + 1;
+  state.moves.push({ id, playerId: player.id, from: player.position, to, steps });
+  if (state.moves.length > MOVE_LIMIT) state.moves.splice(0, state.moves.length - MOVE_LIMIT);
 }
 
 function paySalary(state: GameState, player: Player): void {
   const { salary } = gameMode(state);
   player.money += salary;
-  log(state, `${player.name} проходит Старт и получает ${salary}₵.`);
+  log(state, `${player.name} проходит Старт и получает ${salary}₵.`, 'money', player);
 }
 
 function sendToIsolation(state: GameState, player: Player): void {
+  recordMove(state, player, ISOLATION_INDEX, 0);
   player.position = ISOLATION_INDEX;
   player.isolation = { turnsLeft: ISOLATION_ATTEMPTS };
   state.rolledDouble = false;
   state.doublesInRow = 0;
-  log(state, `${player.name} отправляется в Изолятор.`);
+  log(state, `${player.name} отправляется в Изолятор.`, 'move', player);
 }
 
 /** Выход из Изолятора до броска: дальше обычный ход. */
@@ -632,6 +684,15 @@ function transfer(state: GameState, from: Player, to: Player | null, amount: num
   else state.pot += amount;
 }
 
+/** Проводит обязательный платёж и учитывает ренту в статистике. */
+function pay(state: GameState, payment: Payment, from: Player, to: Player | null): void {
+  transfer(state, from, to, payment.amount);
+  if (payment.rent && to) {
+    state.stats[from.id].rentPaid += payment.amount;
+    state.stats[to.id].rentReceived += payment.amount;
+  }
+}
+
 /**
  * Проводит обязательные платежи по очереди, затем продолжает ход (then).
  * Наличных мало, но хватит с продажей построек и залогом — фаза 'debt' до решения должника.
@@ -645,12 +706,12 @@ function settle(state: GameState, payments: Payment[], then: Debt['then']): void
     const to = payment.to === null ? null : playerById(state, payment.to);
     if (from.bankrupt || payment.amount <= 0) continue;
     if (from.money >= payment.amount) {
-      transfer(state, from, to, payment.amount);
+      pay(state, payment, from, to);
     } else if (liquidationValue(state, from) >= payment.amount) {
       state.debt = { ...payment, queue: payments.slice(i + 1), then };
       state.phase = 'debt';
       const whom = to ? `игроку ${to.name}` : 'банку';
-      log(state, `${from.name} должен ${payment.amount}₵ ${whom}: не хватает наличных, нужно продать постройки или заложить собственность.`);
+      log(state, `${from.name} должен ${payment.amount}₵ ${whom}: не хватает наличных, нужно продать постройки или заложить собственность.`, 'money', from, to);
       return;
     } else {
       bankrupt(state, from, to);
@@ -686,18 +747,23 @@ function bankrupt(state: GameState, player: Player, creditor: Player | null): vo
   player.money = 0;
   player.releaseCards = [];
   player.isolation = null;
+  const order = state.players.filter((p) => p.bankrupt).length;
+  state.stats[player.id].out = { round: state.round, order };
   log(
     state,
     creditor
       ? `${player.name} банкрот и выбывает из игры. Всё имущество переходит игроку ${creditor.name}.`
       : `${player.name} банкрот и выбывает из игры. Имущество возвращается банку.`,
+    'system',
+    player,
+    creditor,
   );
 
   const alive = state.players.filter((p) => !p.bankrupt);
   if (alive.length === 1) {
     state.phase = 'gameOver';
     state.winnerId = alive[0].id;
-    log(state, `${alive[0].name} побеждает!`);
+    log(state, `${alive[0].name} побеждает!`, 'system', alive[0]);
   }
 }
 
@@ -723,7 +789,7 @@ function nextPlayer(state: GameState): void {
   state.dice = null;
   state.rolledDouble = false;
   state.doublesInRow = 0;
-  log(state, `Ход игрока ${player.name}${player.isolation ? ' (в Изоляторе)' : ''}.`);
+  log(state, `Ход игрока ${player.name}${player.isolation ? ' (в Изоляторе)' : ''}.`, 'move', player);
 }
 
 /** Новый круг: в «Блице» после лимита — конец партии, в «Инфляции» на пороге — рост ренты. */
@@ -736,19 +802,19 @@ function startRound(state: GameState): void {
   const before = rentMultiplier(state);
   state.round += 1;
   const limit = mode.roundLimit !== null ? ` из ${mode.roundLimit}` : '';
-  log(state, `Круг ${state.round}${limit}.`);
+  log(state, `Круг ${state.round}${limit}.`, 'system');
   const after = rentMultiplier(state);
-  if (after !== before) log(state, `Инфляция! Вся рента в городе теперь ×${after}.`);
+  if (after !== before) log(state, `Инфляция! Вся рента в городе теперь ×${after}.`, 'system');
 }
 
 /** Лимит кругов: побеждает самый богатый по капиталу, при равенстве — у кого больше наличных, затем кто раньше ходит. */
 function finishByNetWorth(state: GameState): void {
   const ranking = standings(state);
   const winner = ranking[0].player;
-  log(state, `Лимит кругов исчерпан. Капиталы: ${ranking.map((r) => `${r.player.name} ${r.worth}₵`).join(', ')}.`);
+  log(state, `Лимит кругов исчерпан. Капиталы: ${ranking.map((r) => `${r.player.name} ${r.worth}₵`).join(', ')}.`, 'system');
   state.phase = 'gameOver';
   state.winnerId = winner.id;
-  log(state, `${winner.name} побеждает по капиталу!`);
+  log(state, `${winner.name} побеждает по капиталу!`, 'system', winner);
 }
 
 /** Живые игроки по убыванию капитала (netWorth), затем наличных; при равенстве — по порядку хода. */
@@ -759,8 +825,31 @@ export function standings(state: GameState): { player: Player; worth: number }[]
     .sort((a, b) => b.worth - a.worth || b.player.money - a.player.money);
 }
 
-function log(state: GameState, text: string): void {
+export interface PlayerResult {
+  /** 1 — победитель */
+  place: number;
+  player: Player;
+  /** капитал на конец партии; у выбывших — 0 */
+  worth: number;
+  stats: PlayerStats;
+}
+
+/**
+ * Итоговая таблица: победитель, остальные живые по капиталу (standings),
+ * затем выбывшие — кто продержался дольше, тот выше.
+ */
+export function gameResults(state: GameState): PlayerResult[] {
+  const alive = standings(state).sort((a, b) => Number(b.player.id === state.winnerId) - Number(a.player.id === state.winnerId));
+  const out = state.players
+    .filter((p) => p.bankrupt)
+    .sort((a, b) => (state.stats[b.id].out?.order ?? 0) - (state.stats[a.id].out?.order ?? 0))
+    .map((player) => ({ player, worth: 0 }));
+  return [...alive, ...out].map(({ player, worth }, i) => ({ place: i + 1, player, worth, stats: state.stats[player.id] }));
+}
+
+function log(state: GameState, text: string, kind: LogKind, ...who: (Player | null | undefined)[]): void {
   state.logCounter += 1;
-  state.log.push({ id: state.logCounter, text });
+  const players = who.filter((p): p is Player => Boolean(p)).map((p) => p.id);
+  state.log.push({ id: state.logCounter, text, kind, players });
   if (state.log.length > LOG_LIMIT) state.log.splice(0, state.log.length - LOG_LIMIT);
 }

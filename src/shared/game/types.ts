@@ -94,6 +94,8 @@ export interface Payment {
   from: string;
   to: string | null;
   amount: number;
+  /** рента — учитывается в статистике игроков */
+  rent?: true;
 }
 
 export interface Debt extends Payment {
@@ -134,9 +136,51 @@ export interface PendingTrade extends Trade {
   resume: Phase;
 }
 
+/**
+ * Категория записи лога для фильтра:
+ * 'move' — броски, перемещения, карточки, Изолятор; 'money' — рента, налоги, зарплата, копилка, долги;
+ * 'deal' — покупки, торги, обмен, постройки, залоги; 'system' — начало партии, круги, банкротства, итог.
+ */
+export type LogKind = 'move' | 'money' | 'deal' | 'system';
+
 export interface LogEntry {
   id: number;
   text: string;
+  kind: LogKind;
+  /** id игроков, которых касается запись (для фильтра по игроку); пусто — общая запись */
+  players: string[];
+}
+
+/**
+ * Перемещение фишки для анимации в UI. steps > 0 — шаги вперёд, < 0 — назад,
+ * 0 — мгновенный перенос (отправка в Изолятор).
+ */
+export interface Move {
+  /** растёт на 1 с каждым перемещением за партию */
+  id: number;
+  playerId: string;
+  from: number;
+  to: number;
+  steps: number;
+}
+
+/** Статистика игрока для экрана «Итоги партии». */
+export interface PlayerStats {
+  rentPaid: number;
+  rentReceived: number;
+  /** клетки, купленные у банка напрямую или на торгах */
+  cellsBought: number;
+  auctionsWon: number;
+  /** принятые обмены (с любой стороны) */
+  trades: number;
+  /** возведённые модули и небоскрёбы */
+  built: number;
+  /** сколько забрал из копилки Нейтральной зоны */
+  potCollected: number;
+  /** наибольший капитал (netWorth) за партию */
+  peakWorth: number;
+  /** выбывание: круг и порядковый номер (1 — выбыл первым); null — дошёл до конца */
+  out: { round: number; order: number } | null;
 }
 
 export interface GameState {
@@ -172,6 +216,12 @@ export interface GameState {
   /** вытянутая карточка, ждёт APPLY_CARD */
   pendingCard: string | null;
   seed: number;
+  /** бросков кубиков за партию: UI по нему узнаёт новый бросок и анимирует кубики */
+  rollCount: number;
+  /** последние перемещения фишек (не больше MOVE_LIMIT) для пошаговой анимации */
+  moves: Move[];
+  /** player id → статистика для итогов партии */
+  stats: Record<string, PlayerStats>;
   log: LogEntry[];
   logCounter: number;
   winnerId: string | null;
