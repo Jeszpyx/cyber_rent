@@ -1,6 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { normalizeName } from '../shared/game/room';
-
+import {Buffer} from 'node:buffer';
 /** initData старше суток не принимаем: Mini App получает свежую при каждом открытии. */
 export const INIT_DATA_MAX_AGE_SEC = 24 * 60 * 60;
 const GUEST_TOKEN = /^[A-Za-z0-9_-]{20,128}$/;
